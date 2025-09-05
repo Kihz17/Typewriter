@@ -96,9 +96,9 @@ class FactDatabase : KoinComponent {
         expiredIds.forEach { cache.remove(it) }
     }
 
-    internal operator fun get(id: FactId): FactData? = cache[id]
+    operator fun get(id: FactId): FactData? = cache[id]
 
-    internal operator fun set(id: FactId, data: FactData) {
+    operator fun set(id: FactId, data: FactData) {
         if (data.value == 0) {
             cache.remove(id)
         } else {
