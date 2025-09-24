@@ -1,5 +1,7 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import io.papermc.hangarpublishplugin.model.Platforms
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import xyz.jpenilla.resourcefactory.paper.PaperPluginYaml
 import java.io.ByteArrayOutputStream
 
@@ -79,6 +81,52 @@ tasks.register<ShadowJar>("buildAndMove") {
     destinationDirectory = file("../../server/plugins")
     archiveFileName = "Typewriter.${archiveExtension.get()}"
     manifest.from(tasks.shadowJar.get().manifest)
+}
+
+val isDebugBuild = project.findProperty("debug") == "true"
+
+//tasks.withType(JavaCompile::class).configureEach {
+//    doFirst {
+//        if (isDebugBuild) {
+//            println("→ [JavaCompile] Running in DEBUG mode with -g:vars")
+//        }
+//    }
+//
+//    options.compilerArgs.apply {
+//        // clean slate (avoid duplicates)
+//        removeAll(listOf("-g", "-g:none", "-g:vars", "-g:lines", "-g:source"))
+//
+//        if (isDebugBuild) { // keep local variables for debugger
+//            add("-g:vars")
+//        } else { // smaller .class files, no debug metadata
+//            add("-g:none")
+//        }
+//    }
+//}
+
+tasks.withType<KotlinCompile>().configureEach {
+    doFirst {
+        if (isDebugBuild) {
+            println("→ [KotlinCompile] Running in DEBUG mode with -Xno-optimize, -Xno-inline")
+        }
+    }
+
+    compilerOptions {
+        if (isDebugBuild) {
+            freeCompilerArgs.add("-Xdebug")
+        }
+    }
+
+//    compilerOptions {
+//        jvmTarget.set(JvmTarget.JVM_21)
+//
+//        if (isDebugBuild) {
+//            freeCompilerArgs.addAll( // disable aggressive optimizations → variables survive
+//                "-Xno-optimize",
+//                "-Xno-inline"
+//            )
+//        }
+//    }
 }
 
 tasks.register<ShadowJar>("buildRelease") {

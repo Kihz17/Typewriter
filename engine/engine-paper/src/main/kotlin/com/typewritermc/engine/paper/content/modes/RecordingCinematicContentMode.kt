@@ -96,7 +96,7 @@ abstract class RecordingCinematicContentMode<F : Frame<F>>(
     context: ContentContext,
     player: Player,
     private val klass: KClass<F>,
-    private val initialFrame: Int = 0,
+    private val initialFrame: Int = 0, // Initial frame is pulled from the cinematic. It is NOT relative to the Cinematic entry.
 ) : ContentMode(context, player), Listener, KoinComponent {
     private val gson: Gson by inject(named("bukkitDataParser"))
     private val assetManager: AssetManager by inject()
@@ -186,8 +186,15 @@ abstract class RecordingCinematicContentMode<F : Frame<F>>(
             ?: throw IllegalStateException("No asset found for recording cinematic after setup, this should not happen. Asset: '${context.fieldValue}'")
         val oldTapeData = if (assetManager.containsAsset(asset)) assetManager.fetchStringAsset(asset) else null
         if (oldTapeData != null) {
+            val frameToReset = frame - frames.first;
             recorder = Recorder.create(gson, klass, oldTapeData).apply {
-                resetFramesAfter(max(frames.first, frame))
+                // Convert an absolute timeline second to a relative second in the saved file.
+                //
+                // The file stores frames starting from the action’s start as 0.
+                // To read or write at a specific point in the global timeline,
+                // we subtract the action’s start time to get the correct index in the file.
+                // Negative values indicate a time before the action begins.
+                resetFramesAfter(max(frameToReset, 0))
             }
         }
         // If we are starting from the middle of the segment, apply the state
