@@ -27,7 +27,26 @@ part "page_editor.g.dart";
 @Riverpod(keepAlive: true)
 String? currentPageId(Ref ref) {
   final routeData = ref.watch(currentRouteDataProvider(PageEditorRoute.name));
-  return routeData?.pathParams.getString("id");
+  final newPageId = routeData?.pathParams.getString("id");
+
+  // Track previous page for cleanup
+  ref.listen(currentPageIdProvider, (previous, next) {
+    if (previous != null && previous != next) {
+      debugPrint("Cleaning page providers");
+      ref.read(cleanupPageProvidersProvider(previous));
+    }
+  });
+
+  return newPageId;
+}
+
+@riverpod
+void cleanupPageProviders(Ref ref, String? previousPageId) {
+  if (previousPageId != null) {
+    // Invalidate all node position providers for the previous page
+    ref.invalidate(graphableEntryIdsProvider);
+    // This will cause autoDispose providers to be cleaned up
+  }
 }
 
 @riverpod

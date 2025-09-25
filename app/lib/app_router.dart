@@ -50,7 +50,7 @@ class AppRouter extends RootStackRouter {
               path: "pages",
               children: [
                 AutoRoute(page: EmptyPageEditorRoute.page, path: ""),
-                AutoRoute(page: PageEditorRoute.page, path: ":id"),
+                AutoRoute(page: PageEditorRoute.page, path: ":id", maintainState: false),
               ],
             ),
           ],
@@ -113,13 +113,35 @@ extension AppRouterX on AppRouter {
       return;
     }
 
-    // Sometimes the app router does not complete the future and it gets stuck.
     unawaited(
       ref.read(appRouter).push(
-            PageEditorRoute(id: pageId),
-            onFailure: (e) =>
-                debugPrint("Failed to navigate to page $pageId: $e"),
-          ),
+        PageEditorRoute(id: pageId),
+        onFailure: (e) =>
+            debugPrint("Failed to navigate to page $pageId: $e"),
+      ),
     );
+
+    // try {
+    //   await ref.read(appRouter).push(
+    //     PageEditorRoute(id: pageId),
+    //   ).timeout(
+    //     const Duration(seconds: 5),
+    //     onTimeout: () {
+    //       debugPrint("Navigation to page $pageId timed out");
+    //       throw TimeoutException("Navigation timed out", const Duration(seconds: 5));
+    //     },
+    //   );
+    // } catch (e) {
+    //   debugPrint("Failed to navigate to page $pageId: $e");
+    //   // Optionally retry once
+    //   try {
+    //     await ref.read(appRouter).push(
+    //       PageEditorRoute(id: pageId),
+    //     ).timeout(const Duration(seconds: 3));
+    //   } catch (retryError) {
+    //     debugPrint("Retry failed for page $pageId: $retryError");
+    //     rethrow;
+    //   }
+    // }
   }
 }
