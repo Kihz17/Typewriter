@@ -59,7 +59,21 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onViewportChanged();
       _initializeNodePositions();
+      _centerCameraOnNodes();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant DraggableGraph oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // Check if the entry IDs changed (indicating a page change)
+    if (widget.entryIds != oldWidget.entryIds) {
+      // Schedule camera centering after the frame is built
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _centerCameraOnNodes();
+      });
+    }
   }
 
   @override
@@ -161,6 +175,57 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
     _nodeKeys.removeWhere((nodeId, _) => !currentEntrySet.contains(nodeId));
   }
 
+  void _centerCameraOnNodes() {
+    final page = ref.read(currentPageProvider);
+    if (page == null || widget.entryIds.isEmpty) return;
+
+    // Get all existing node positions
+    final nodePositions = <Offset>[];
+    for (final id in widget.entryIds) {
+      final position = page.nodePositions[id];
+      if (position != null) {
+        nodePositions.add(position);
+      }
+    }
+
+    // If no nodes have saved positions, don't center (they'll use default positions)
+    if (nodePositions.isEmpty) return;
+
+    // Calculate bounding box of all nodes (accounting for node size 120x60)
+    const nodeSize = Size(120, 60);
+    double minX = nodePositions.first.dx;
+    double maxX = nodePositions.first.dx + nodeSize.width;
+    double minY = nodePositions.first.dy;
+    double maxY = nodePositions.first.dy + nodeSize.height;
+
+    for (final pos in nodePositions) {
+      minX = minX < pos.dx ? minX : pos.dx;
+      maxX = maxX > (pos.dx + nodeSize.width) ? maxX : (pos.dx + nodeSize.width);
+      minY = minY < pos.dy ? minY : pos.dy;
+      maxY = maxY > (pos.dy + nodeSize.height) ? maxY : (pos.dy + nodeSize.height);
+    }
+
+    // Calculate center point of all nodes
+    final centerX = (minX + maxX) / 2;
+    final centerY = (minY + maxY) / 2;
+
+    // Get screen size to calculate viewport center
+    final screenSize = MediaQuery.of(context).size;
+    final viewportCenterX = screenSize.width / 2;
+    final viewportCenterY = screenSize.height / 2;
+
+    // Calculate translation needed to center the nodes in the viewport
+    final translateX = viewportCenterX - centerX;
+    final translateY = viewportCenterY - centerY;
+
+    // Create transformation matrix to center the camera
+    final matrix = Matrix4.identity()
+      ..translate(translateX, translateY);
+
+    // Apply the transformation
+    _controller.value = matrix;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.entryIds.isEmpty) {
@@ -174,7 +239,7 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
     return InteractiveViewer(
       transformationController: _controller,
       constrained: false,
-      boundaryMargin: const EdgeInsets.all(1000),
+      boundaryMargin: const EdgeInsets.all(1),
       minScale: 0.1,
       maxScale: 2.5,
       child: SizedBox(
