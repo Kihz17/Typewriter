@@ -195,6 +195,7 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
                     positions: positions,
                     edges: widget.edges,
                     visibleNodes: _visibleNodes,
+                    visibleRect: _visibleRect,
                     dashOffset: _animController.value,
                     nodeSizes: _nodeSizes,
                     onNodeSizeNeeded: _measureNodeIfNeeded,
@@ -255,6 +256,7 @@ class EdgePainter extends CustomPainter {
   final Map<String, Offset> positions;
   final Map<String, Set<String>> edges;
   final List<String> visibleNodes;
+  final Rect visibleRect;
   final double dashOffset; // 0..1
   final Color color;
   final Map<String, Size> nodeSizes;
@@ -264,11 +266,52 @@ class EdgePainter extends CustomPainter {
     required this.positions,
     required this.edges,
     required this.visibleNodes,
+    required this.visibleRect,
     required this.dashOffset,
     required this.nodeSizes,
     required this.onNodeSizeNeeded,
     this.color = Colors.green,
   });
+
+  bool _lineIntersectsRect(Offset from, Offset to) {
+    // Check if either point is inside the rect (fast path)
+    if (visibleRect.contains(from) || visibleRect.contains(to)) {
+      return true;
+    }
+
+    // Use Liang-Barsky line clipping algorithm
+    final dx = to.dx - from.dx;
+    final dy = to.dy - from.dy;
+
+    final p = [-dx, dx, -dy, dy];
+    final q = [
+      from.dx - visibleRect.left,
+      visibleRect.right - from.dx,
+      from.dy - visibleRect.top,
+      visibleRect.bottom - from.dy
+    ];
+
+    double u1 = 0.0;
+    double u2 = 1.0;
+
+    for (int i = 0; i < 4; i++) {
+      if (p[i] == 0) {
+        // Line is parallel to the boundary
+        if (q[i] < 0) return false;
+      } else {
+        final t = q[i] / p[i];
+        if (p[i] < 0) {
+          if (t > u2) return false;
+          if (t > u1) u1 = t;
+        } else {
+          if (t < u1) return false;
+          if (t < u2) u2 = t;
+        }
+      }
+    }
+
+    return u1 <= u2;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -294,11 +337,7 @@ class EdgePainter extends CustomPainter {
       final fromOffset = Offset(fromSize.width / 2, fromSize.height / 2);
       final from = (positions[fromId] ?? Offset.zero) + fromOffset;
 
-      final visibleFrom = visibleNodes.contains(fromId);
-
       for (final toId in toIds) {
-        if (!visibleNodes.contains(toId) && !visibleFrom) continue;
-
         // Get actual sizes or defaults, trigger measurement if needed
         final toSize = nodeSizes[toId] ?? const Size(120, 60);
         if (nodeSizes[toId] == null) {
@@ -308,6 +347,9 @@ class EdgePainter extends CustomPainter {
         // Calculate center offset for to node
         final toOffset = Offset(toSize.width / 2, toSize.height / 2);
         final to = (positions[toId] ?? Offset.zero) + toOffset;
+
+        // Performance optimization: if edge is not visible, don't render
+        if (!_lineIntersectsRect(from, to)) continue;
 
         final direction = to - from;
         final length = direction.distance;
@@ -344,6 +386,7 @@ class EdgePainter extends CustomPainter {
     return positions != oldDelegate.positions ||
         edges != oldDelegate.edges ||
         visibleNodes != oldDelegate.visibleNodes ||
+        visibleRect != oldDelegate.visibleRect ||
         nodeSizes != oldDelegate.nodeSizes ||
         (dashOffset - oldDelegate.dashOffset).abs() > 0.01;
   }
