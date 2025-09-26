@@ -149,7 +149,12 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
       // Compute the nodes we can see relative to the viewport
       final newVisibleNodes = widget.entryIds.where((id) {
         final pos = _getNodePosition(id);
-        final nodeRect = Rect.fromLTWH(pos.dx, pos.dy, 120, 60);
+        // Get actual size or default, trigger measurement if needed
+        final nodeSize = _nodeSizes[id] ?? const Size(120, 60);
+        if (_nodeSizes[id] == null) {
+          _measureNodeIfNeeded(id);
+        }
+        final nodeRect = Rect.fromLTWH(pos.dx, pos.dy, nodeSize.width, nodeSize.height);
         return newVisibleRect.overlaps(nodeRect);
       }).toList();
 
@@ -179,30 +184,41 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
     final page = ref.read(currentPageProvider);
     if (page == null || widget.entryIds.isEmpty) return;
 
-    // Get all existing node positions
-    final nodePositions = <Offset>[];
+    // Get all existing node positions with their IDs
+    final nodeData = <({String id, Offset position})>[];
     for (final id in widget.entryIds) {
       final position = page.nodePositions[id];
       if (position != null) {
-        nodePositions.add(position);
+        nodeData.add((id: id, position: position));
       }
     }
 
     // If no nodes have saved positions, don't center (they'll use default positions)
-    if (nodePositions.isEmpty) return;
+    if (nodeData.isEmpty) return;
 
-    // Calculate bounding box of all nodes (accounting for node size 120x60)
-    const nodeSize = Size(120, 60);
-    double minX = nodePositions.first.dx;
-    double maxX = nodePositions.first.dx + nodeSize.width;
-    double minY = nodePositions.first.dy;
-    double maxY = nodePositions.first.dy + nodeSize.height;
+    // Initialize bounding box with first node
+    final firstNode = nodeData.first;
+    final firstNodeSize = _nodeSizes[firstNode.id] ?? const Size(120, 60);
+    if (_nodeSizes[firstNode.id] == null) {
+      _measureNodeIfNeeded(firstNode.id);
+    }
 
-    for (final pos in nodePositions) {
-      minX = minX < pos.dx ? minX : pos.dx;
-      maxX = maxX > (pos.dx + nodeSize.width) ? maxX : (pos.dx + nodeSize.width);
-      minY = minY < pos.dy ? minY : pos.dy;
-      maxY = maxY > (pos.dy + nodeSize.height) ? maxY : (pos.dy + nodeSize.height);
+    double minX = firstNode.position.dx;
+    double maxX = firstNode.position.dx + firstNodeSize.width;
+    double minY = firstNode.position.dy;
+    double maxY = firstNode.position.dy + firstNodeSize.height;
+
+    // Calculate bounding box of all nodes using their actual sizes
+    for (final node in nodeData) {
+      final nodeSize = _nodeSizes[node.id] ?? const Size(120, 60);
+      if (_nodeSizes[node.id] == null) {
+        _measureNodeIfNeeded(node.id);
+      }
+
+      minX = minX < node.position.dx ? minX : node.position.dx;
+      maxX = maxX > (node.position.dx + nodeSize.width) ? maxX : (node.position.dx + nodeSize.width);
+      minY = minY < node.position.dy ? minY : node.position.dy;
+      maxY = maxY > (node.position.dy + nodeSize.height) ? maxY : (node.position.dy + nodeSize.height);
     }
 
     // Calculate center point of all nodes
