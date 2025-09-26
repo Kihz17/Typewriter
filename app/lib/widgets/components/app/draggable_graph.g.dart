@@ -23,5 +23,22 @@ final viewportCenterGetterProvider =
 );
 
 typedef _$ViewportCenterGetter = Notifier<Offset Function()?>;
+String _$graphUpdateNotifierHash() =>
+    r'8cc15cf668553ea41eb510fe4d7cd3001bfdeaa1';
+
+/// See also [GraphUpdateNotifier].
+@ProviderFor(GraphUpdateNotifier)
+final graphUpdateNotifierProvider =
+    NotifierProvider<GraphUpdateNotifier, VoidCallback?>.internal(
+  GraphUpdateNotifier.new,
+  name: r'graphUpdateNotifierProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$graphUpdateNotifierHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+typedef _$GraphUpdateNotifier = Notifier<VoidCallback?>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

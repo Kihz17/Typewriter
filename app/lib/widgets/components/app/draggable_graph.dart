@@ -8,6 +8,7 @@ import "package:riverpod_annotation/riverpod_annotation.dart";
 import "package:typewriter/models/entry.dart";
 import "package:typewriter/models/page.dart";
 import "package:typewriter/pages/page_editor.dart";
+import "package:typewriter/utils/extensions.dart";
 import "package:typewriter/utils/passing_reference.dart";
 import "package:typewriter/widgets/components/app/empty_screen.dart";
 import "package:typewriter/widgets/components/app/entry_node.dart";
@@ -27,6 +28,30 @@ class ViewportCenterGetter extends _$ViewportCenterGetter {
   void setGetter(Offset Function()? getter) {
     debugPrint("DEBUG: ViewportCenterGetter.setGetter called with ${getter != null ? 'non-null' : 'null'} getter");
     state = getter;
+  }
+}
+
+// Provider to hold the current graph update notifier function
+@Riverpod(keepAlive: true)
+class GraphUpdateNotifier extends _$GraphUpdateNotifier {
+  @override
+  VoidCallback? build() {
+    return null;
+  }
+
+  void setNotifier(VoidCallback? notifier) {
+    debugPrint("DEBUG: GraphUpdateNotifier.setNotifier called with ${notifier != null ? 'non-null' : 'null'} notifier");
+    state = notifier;
+  }
+
+  void notifyGraphUpdate() {
+    debugPrint("DEBUG: GraphUpdateNotifier.notifyGraphUpdate called");
+    final notifier = state;
+    if (notifier != null) {
+      notifier();
+    } else {
+      debugPrint("DEBUG: No graph update notifier registered");
+    }
   }
 }
 
@@ -84,6 +109,13 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
       debugPrint("DEBUG: Viewport center getter registered successfully in initState");
     });
 
+    // Register graph update notifier
+    debugPrint("DEBUG: Registering graph update notifier in DraggableGraph initState");
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(graphUpdateNotifierProvider.notifier).setNotifier(_onGraphUpdate);
+      debugPrint("DEBUG: Graph update notifier registered successfully in initState");
+    });
+
     // Initialize page tracking
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final page = ref.read(currentPageProvider);
@@ -121,6 +153,9 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
   void dispose() {
     // Clear viewport center getter
     ref.read(viewportCenterGetterProvider.notifier).setGetter(null);
+
+    // Clear graph update notifier
+    ref.read(graphUpdateNotifierProvider.notifier).setNotifier(null);
 
     _controller.removeListener(_onViewportChanged);
     _controller.dispose();
@@ -193,43 +228,52 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
     // Throttle viewport changes to avoid flooding rebuilds
     if (_throttleTimer?.isActive ?? false) return;
     _throttleTimer = Timer(const Duration(milliseconds: 50), () {
-      final matrix = _controller.value;
-      final screenSize = MediaQuery.of(context).size;
-
-      // Screen rect in screen space
-      final screenRect = Rect.fromLTWH(
-          0, 0, screenSize.width, screenSize.height);
-
-      // Transform into world/graph space
-      final inverseMatrix = Matrix4.inverted(matrix);
-      final worldTopLeft = MatrixUtils.transformPoint(
-          inverseMatrix, screenRect.topLeft);
-      final worldBottomRight = MatrixUtils.transformPoint(
-          inverseMatrix, screenRect.bottomRight);
-
-      // This is the new rect we will use for viewport culling
-      final newVisibleRect = Rect.fromPoints(worldTopLeft, worldBottomRight);
-
-      // Compute the nodes we can see relative to the viewport
-      final newVisibleNodes = widget.entryIds.where((id) {
-        final pos = _getNodePosition(id);
-        // Get actual size or default, trigger measurement if needed
-        final nodeSize = _nodeSizes[id] ?? const Size(120, 60);
-        if (_nodeSizes[id] == null) {
-          _measureNodeIfNeeded(id);
-        }
-        final nodeRect = Rect.fromLTWH(pos.dx, pos.dy, nodeSize.width, nodeSize.height);
-        return newVisibleRect.overlaps(nodeRect);
-      }).toList();
-
-      setState(() {
-        _visibleRect = newVisibleRect;
-        _visibleNodes = newVisibleNodes;
-      });
-
-      // Clean up sizes and keys for nodes that are no longer visible
-      _cleanupOffscreenNodes();
+      _recalculateVisibleNodes();
     });
+  }
+
+  void _onGraphUpdate() {
+    debugPrint("DEBUG: Graph update notification received, recalculating visible nodes");
+    _recalculateVisibleNodes();
+  }
+
+  void _recalculateVisibleNodes() {
+    final matrix = _controller.value;
+    final screenSize = MediaQuery.of(context).size;
+
+    // Screen rect in screen space
+    final screenRect = Rect.fromLTWH(
+        0, 0, screenSize.width, screenSize.height);
+
+    // Transform into world/graph space
+    final inverseMatrix = Matrix4.inverted(matrix);
+    final worldTopLeft = MatrixUtils.transformPoint(
+        inverseMatrix, screenRect.topLeft);
+    final worldBottomRight = MatrixUtils.transformPoint(
+        inverseMatrix, screenRect.bottomRight);
+
+    // This is the new rect we will use for viewport culling
+    final newVisibleRect = Rect.fromPoints(worldTopLeft, worldBottomRight);
+
+    // Compute the nodes we can see relative to the viewport
+    final newVisibleNodes = widget.entryIds.where((id) {
+      final pos = _getNodePosition(id);
+      // Get actual size or default, trigger measurement if needed
+      final nodeSize = _nodeSizes[id] ?? const Size(120, 60);
+      if (_nodeSizes[id] == null) {
+        _measureNodeIfNeeded(id);
+      }
+      final nodeRect = Rect.fromLTWH(pos.dx, pos.dy, nodeSize.width, nodeSize.height);
+      return newVisibleRect.overlaps(nodeRect);
+    }).toList();
+
+    setState(() {
+      _visibleRect = newVisibleRect;
+      _visibleNodes = newVisibleNodes;
+    });
+
+    // Clean up sizes and keys for nodes that are no longer visible
+    _cleanupOffscreenNodes();
   }
 
   void _cleanupOffscreenNodes() {
@@ -748,9 +792,3 @@ class EdgePainter extends CustomPainter {
   }
 }
 
-// Extension to convert Iterable<MapEntry> to Map
-extension ToMap<K, V> on Iterable<MapEntry<K, V>> {
-  Map<K, V> toMap() {
-    return Map.fromEntries(this);
-  }
-}

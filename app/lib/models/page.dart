@@ -12,6 +12,7 @@ import "package:typewriter/utils/extensions.dart";
 import "package:typewriter/utils/icons.dart";
 import "package:typewriter/utils/passing_reference.dart";
 import "package:typewriter/utils/popups.dart";
+import "package:typewriter/widgets/components/app/draggable_graph.dart";
 import "package:typewriter/widgets/components/app/entry_search.dart";
 import "package:typewriter/widgets/components/app/search_bar.dart";
 import "package:typewriter/widgets/components/general/toasts.dart";
@@ -262,6 +263,10 @@ extension PageExtension on Page {
     }
 
     await ref.read(communicatorProvider).createEntry(id, entry);
+
+    // Notify graph of node creation
+    debugPrint("DEBUG: Notifying graph of entry creation for ${entry.id}");
+    ref.read(graphUpdateNotifierProvider.notifier).notifyGraphUpdate();
   }
 
   Future<void> updateEntireEntry(PassingRef ref, Entry entry) async {
@@ -317,6 +322,10 @@ extension PageExtension on Page {
   /// This should only be used to sync the entry from the server.
   void syncInsertEntry(PassingRef ref, Entry entry) {
     updatePage(ref, (page) => _insertEntry(page, entry));
+
+    // Notify graph of node sync insertion
+    debugPrint("DEBUG: Notifying graph of entry sync insertion for ${entry.id}");
+    ref.read(graphUpdateNotifierProvider.notifier).notifyGraphUpdate();
   }
 
   Page _insertEntry(Page page, Entry entry) {
@@ -360,6 +369,10 @@ extension PageExtension on Page {
     if (ref.read(inspectingEntryIdProvider) == entry.id) {
       ref.read(inspectingEntryIdProvider.notifier).clearSelection();
     }
+
+    // Notify graph of node deletion
+    debugPrint("DEBUG: Notifying graph of entry deletion for ${entry.id}");
+    ref.read(graphUpdateNotifierProvider.notifier).notifyGraphUpdate();
   }
 
   void removeReferencesTo(PassingRef ref, String entryId) {
@@ -429,6 +442,10 @@ extension PageExtension on Page {
             entries: [...entries.where((e) => e.id != entryId)],
           ),
         );
+
+    // Notify graph of node sync deletion
+    debugPrint("DEBUG: Notifying graph of entry sync deletion for $entryId");
+    ref.read(graphUpdateNotifierProvider.notifier).notifyGraphUpdate();
   }
 }
 
