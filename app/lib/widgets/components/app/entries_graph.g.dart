@@ -452,22 +452,6 @@ class _EntryTriggersProviderElement
   String get entryId => (origin as EntryTriggersProvider).entryId;
 }
 
-String _$graphHash() => r'2452c3b9af51100a76c3ac944fed3e48221d079f';
-
-/// See also [graph].
-@ProviderFor(graph)
-final graphProvider = AutoDisposeProvider<Graph>.internal(
-  graph,
-  name: r'graphProvider',
-  debugGetCreateSourceHash:
-      const bool.fromEnvironment('dart.vm.product') ? null : _$graphHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
-
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef GraphRef = AutoDisposeProviderRef<Graph>;
 String _$nodePositionHash() => r'ecf6d8ccc86d06531424919e9d6ef969c2916f95';
 
 /// See also [nodePosition].
@@ -597,5 +581,23 @@ class _NodePositionProviderElement extends AutoDisposeProviderElement<Offset>
   @override
   String get nodeId => (origin as NodePositionProvider).nodeId;
 }
+
+String _$triggerEdgesHash() => r'b47258103b6445419a5f6987777f677009c75832';
+
+/// See also [triggerEdges].
+@ProviderFor(triggerEdges)
+final triggerEdgesProvider =
+    AutoDisposeProvider<Map<String, Set<String>>>.internal(
+  triggerEdges,
+  name: r'triggerEdgesProvider',
+  debugGetCreateSourceHash:
+      const bool.fromEnvironment('dart.vm.product') ? null : _$triggerEdgesHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef TriggerEdgesRef = AutoDisposeProviderRef<Map<String, Set<String>>>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

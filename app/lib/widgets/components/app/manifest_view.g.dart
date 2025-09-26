@@ -191,22 +191,154 @@ class _EntryReferencesProviderElement
   String get entryId => (origin as EntryReferencesProvider).entryId;
 }
 
-String _$manifestGraphHash() => r'b639f8877d5c21c8688cea9a7fbdafac945c0876';
+String _$manifestNodePositionHash() =>
+    r'159a2ece2027f9a34878fea8ecf756857033c734';
 
-/// See also [manifestGraph].
-@ProviderFor(manifestGraph)
-final manifestGraphProvider = AutoDisposeProvider<Graph>.internal(
-  manifestGraph,
-  name: r'manifestGraphProvider',
+/// See also [manifestNodePosition].
+@ProviderFor(manifestNodePosition)
+const manifestNodePositionProvider = ManifestNodePositionFamily();
+
+/// See also [manifestNodePosition].
+class ManifestNodePositionFamily extends Family<Offset> {
+  /// See also [manifestNodePosition].
+  const ManifestNodePositionFamily();
+
+  /// See also [manifestNodePosition].
+  ManifestNodePositionProvider call(
+    String nodeId,
+  ) {
+    return ManifestNodePositionProvider(
+      nodeId,
+    );
+  }
+
+  @override
+  ManifestNodePositionProvider getProviderOverride(
+    covariant ManifestNodePositionProvider provider,
+  ) {
+    return call(
+      provider.nodeId,
+    );
+  }
+
+  static const Iterable<ProviderOrFamily>? _dependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
+
+  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
+      _allTransitiveDependencies;
+
+  @override
+  String? get name => r'manifestNodePositionProvider';
+}
+
+/// See also [manifestNodePosition].
+class ManifestNodePositionProvider extends AutoDisposeProvider<Offset> {
+  /// See also [manifestNodePosition].
+  ManifestNodePositionProvider(
+    String nodeId,
+  ) : this._internal(
+          (ref) => manifestNodePosition(
+            ref as ManifestNodePositionRef,
+            nodeId,
+          ),
+          from: manifestNodePositionProvider,
+          name: r'manifestNodePositionProvider',
+          debugGetCreateSourceHash:
+              const bool.fromEnvironment('dart.vm.product')
+                  ? null
+                  : _$manifestNodePositionHash,
+          dependencies: ManifestNodePositionFamily._dependencies,
+          allTransitiveDependencies:
+              ManifestNodePositionFamily._allTransitiveDependencies,
+          nodeId: nodeId,
+        );
+
+  ManifestNodePositionProvider._internal(
+    super._createNotifier, {
+    required super.name,
+    required super.dependencies,
+    required super.allTransitiveDependencies,
+    required super.debugGetCreateSourceHash,
+    required super.from,
+    required this.nodeId,
+  }) : super.internal();
+
+  final String nodeId;
+
+  @override
+  Override overrideWith(
+    Offset Function(ManifestNodePositionRef provider) create,
+  ) {
+    return ProviderOverride(
+      origin: this,
+      override: ManifestNodePositionProvider._internal(
+        (ref) => create(ref as ManifestNodePositionRef),
+        from: from,
+        name: null,
+        dependencies: null,
+        allTransitiveDependencies: null,
+        debugGetCreateSourceHash: null,
+        nodeId: nodeId,
+      ),
+    );
+  }
+
+  @override
+  AutoDisposeProviderElement<Offset> createElement() {
+    return _ManifestNodePositionProviderElement(this);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is ManifestNodePositionProvider && other.nodeId == nodeId;
+  }
+
+  @override
+  int get hashCode {
+    var hash = _SystemHash.combine(0, runtimeType.hashCode);
+    hash = _SystemHash.combine(hash, nodeId.hashCode);
+
+    return _SystemHash.finish(hash);
+  }
+}
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+mixin ManifestNodePositionRef on AutoDisposeProviderRef<Offset> {
+  /// The parameter `nodeId` of this provider.
+  String get nodeId;
+}
+
+class _ManifestNodePositionProviderElement
+    extends AutoDisposeProviderElement<Offset> with ManifestNodePositionRef {
+  _ManifestNodePositionProviderElement(super.provider);
+
+  @override
+  String get nodeId => (origin as ManifestNodePositionProvider).nodeId;
+}
+
+String _$manifestEdgesHash() => r'a1962539f1f396134dace3e0803e51e1ae152b43';
+
+/// See also [manifestEdges].
+@ProviderFor(manifestEdges)
+final manifestEdgesProvider =
+    AutoDisposeProvider<Map<String, Set<String>>>.internal(
+  manifestEdges,
+  name: r'manifestEdgesProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
       ? null
-      : _$manifestGraphHash,
+      : _$manifestEdgesHash,
   dependencies: null,
   allTransitiveDependencies: null,
 );
 
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
-typedef ManifestGraphRef = AutoDisposeProviderRef<Graph>;
+typedef ManifestEdgesRef = AutoDisposeProviderRef<Map<String, Set<String>>>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package
