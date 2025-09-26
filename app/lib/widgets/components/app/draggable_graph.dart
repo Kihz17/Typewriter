@@ -70,6 +70,7 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onViewportChanged();
       _initializeNodePositions();
+      _generateAllMissingPositions();
       _relocateOutlierNodes();
       _centerCameraOnNodes();
     });
@@ -133,24 +134,16 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
       return Offset.zero;
     }
 
-    // Check if position exists, if not generate and store a new one
+    // Return existing position if available
     final existingPosition = page.nodePositions[nodeId];
     if (existingPosition != null) {
       return existingPosition;
     }
 
-    // Generate initial position for external entries
-    final newPosition = _generateInitialPosition(nodeId);
-
-    // Store the position immediately so it persists
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final currentPage = ref.read(currentPageProvider);
-      if (currentPage != null) {
-        currentPage.updateNodePosition(ref.passing, nodeId, newPosition);
-      }
-    });
-
-    return newPosition;
+    // If no position exists, this shouldn't happen after initialization
+    // but provide a fallback for safety
+    debugPrint("Warning: Node $nodeId has no position. This might indicate an initialization issue.");
+    return _generateInitialPosition(nodeId);
   }
 
   void _measureNodeIfNeeded(String nodeId) {
@@ -298,24 +291,38 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
     }
   }
 
-  void _relocateOutlierNodes() {
+  void _generateAllMissingPositions() {
     final page = ref.read(currentPageProvider);
     if (page == null) return;
 
-    final positions = Map<String, Offset>.from(page.nodePositions);
-    if (positions.length < 2) return; // Need at least 2 nodes
+    // Generate positions for any entries that don't have them yet
+    for (final entryId in widget.entryIds) {
+      if (!page.nodePositions.containsKey(entryId)) {
+        final position = _generateInitialPosition(entryId);
+        // Update position immediately (synchronously) during initialization
+        page.updateNodePosition(ref.passing, entryId, position);
+      }
+    }
+  }
+
+  void _relocateOutlierNodes() {
+    final page = ref.read(currentPageProvider);
+    if (page == null || widget.entryIds.length < 2) return;
 
     final outliers = <String, Offset>{};
 
-    // Find outliers (nodes >20k from nearest neighbor)
-    for (final entry in positions.entries) {
-      final nodeId = entry.key;
-      final nodePos = entry.value;
+    // Find outliers among all widget.entryIds (nodes >20k from nearest neighbor)
+    for (final nodeId in widget.entryIds) {
+      final nodePos = page.nodePositions[nodeId];
+      if (nodePos == null) continue; // Skip if no position (shouldn't happen after _generateAllMissingPositions)
 
       double minDistance = double.infinity;
-      for (final otherEntry in positions.entries) {
-        if (otherEntry.key == nodeId) continue;
-        final distance = (nodePos - otherEntry.value).distance;
+      for (final otherNodeId in widget.entryIds) {
+        if (otherNodeId == nodeId) continue;
+        final otherPos = page.nodePositions[otherNodeId];
+        if (otherPos == null) continue;
+
+        final distance = (nodePos - otherPos).distance;
         if (distance < minDistance) {
           minDistance = distance;
         }
@@ -328,7 +335,15 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
 
     // Relocate outliers closer to cluster
     if (outliers.isNotEmpty) {
-      _relocateToCluster(outliers, positions);
+      // Get all positions for cluster analysis
+      final allPositions = <String, Offset>{};
+      for (final entryId in widget.entryIds) {
+        final position = page.nodePositions[entryId];
+        if (position != null) {
+          allPositions[entryId] = position;
+        }
+      }
+      _relocateToCluster(outliers, allPositions);
     }
   }
 
