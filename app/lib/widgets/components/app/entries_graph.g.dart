@@ -468,5 +468,134 @@ final graphProvider = AutoDisposeProvider<Graph>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef GraphRef = AutoDisposeProviderRef<Graph>;
+String _$nodePositionHash() => r'ecf6d8ccc86d06531424919e9d6ef969c2916f95';
+
+/// See also [nodePosition].
+@ProviderFor(nodePosition)
+const nodePositionProvider = NodePositionFamily();
+
+/// See also [nodePosition].
+class NodePositionFamily extends Family<Offset> {
+  /// See also [nodePosition].
+  const NodePositionFamily();
+
+  /// See also [nodePosition].
+  NodePositionProvider call(
+    String nodeId,
+  ) {
+    return NodePositionProvider(
+      nodeId,
+    );
+  }
+
+  @override
+  NodePositionProvider getProviderOverride(
+    covariant NodePositionProvider provider,
+  ) {
+    return call(
+      provider.nodeId,
+    );
+  }
+
+  static const Iterable<ProviderOrFamily>? _dependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
+
+  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
+      _allTransitiveDependencies;
+
+  @override
+  String? get name => r'nodePositionProvider';
+}
+
+/// See also [nodePosition].
+class NodePositionProvider extends AutoDisposeProvider<Offset> {
+  /// See also [nodePosition].
+  NodePositionProvider(
+    String nodeId,
+  ) : this._internal(
+          (ref) => nodePosition(
+            ref as NodePositionRef,
+            nodeId,
+          ),
+          from: nodePositionProvider,
+          name: r'nodePositionProvider',
+          debugGetCreateSourceHash:
+              const bool.fromEnvironment('dart.vm.product')
+                  ? null
+                  : _$nodePositionHash,
+          dependencies: NodePositionFamily._dependencies,
+          allTransitiveDependencies:
+              NodePositionFamily._allTransitiveDependencies,
+          nodeId: nodeId,
+        );
+
+  NodePositionProvider._internal(
+    super._createNotifier, {
+    required super.name,
+    required super.dependencies,
+    required super.allTransitiveDependencies,
+    required super.debugGetCreateSourceHash,
+    required super.from,
+    required this.nodeId,
+  }) : super.internal();
+
+  final String nodeId;
+
+  @override
+  Override overrideWith(
+    Offset Function(NodePositionRef provider) create,
+  ) {
+    return ProviderOverride(
+      origin: this,
+      override: NodePositionProvider._internal(
+        (ref) => create(ref as NodePositionRef),
+        from: from,
+        name: null,
+        dependencies: null,
+        allTransitiveDependencies: null,
+        debugGetCreateSourceHash: null,
+        nodeId: nodeId,
+      ),
+    );
+  }
+
+  @override
+  AutoDisposeProviderElement<Offset> createElement() {
+    return _NodePositionProviderElement(this);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is NodePositionProvider && other.nodeId == nodeId;
+  }
+
+  @override
+  int get hashCode {
+    var hash = _SystemHash.combine(0, runtimeType.hashCode);
+    hash = _SystemHash.combine(hash, nodeId.hashCode);
+
+    return _SystemHash.finish(hash);
+  }
+}
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+mixin NodePositionRef on AutoDisposeProviderRef<Offset> {
+  /// The parameter `nodeId` of this provider.
+  String get nodeId;
+}
+
+class _NodePositionProviderElement extends AutoDisposeProviderElement<Offset>
+    with NodePositionRef {
+  _NodePositionProviderElement(super.provider);
+
+  @override
+  String get nodeId => (origin as NodePositionProvider).nodeId;
+}
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

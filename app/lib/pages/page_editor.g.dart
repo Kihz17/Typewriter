@@ -6,7 +6,7 @@ part of 'page_editor.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$currentPageIdHash() => r'26e97ca3f9d4a7df6d7699a3930c2cc2e218bee1';
+String _$currentPageIdHash() => r'0b25228566740d26ca51a7865fdd3ae55030d3b9';
 
 /// See also [currentPageId].
 @ProviderFor(currentPageId)

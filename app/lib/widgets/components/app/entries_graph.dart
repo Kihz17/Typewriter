@@ -11,6 +11,7 @@ import "package:typewriter/widgets/components/app/empty_screen.dart";
 import "package:typewriter/widgets/components/app/entry_node.dart";
 import "package:typewriter/widgets/components/app/entry_search.dart";
 import "package:typewriter/widgets/components/app/search_bar.dart";
+import "package:typewriter/utils/passing_reference.dart";
 import 'dart:async';
 import 'dart:ui';
 
@@ -114,14 +115,15 @@ Graph graph(Ref ref) {
   return graph;
 }
 
-final nodePositionProvider =
-StateNotifierProvider.autoDispose.family<NodePositionNotifier, Offset, String>(
-        (ref, nodeId) => NodePositionNotifier());
+@riverpod
+Offset nodePosition(Ref ref, String nodeId) {
+  final page = ref.watch(currentPageProvider);
+  if (page == null) {
+    debugPrint("Page was null when accessing position for node. This is a bug.");
+    return Offset.zero;
+  }
 
-class NodePositionNotifier extends StateNotifier<Offset> {
-  NodePositionNotifier() : super(Offset.zero);
-
-  void setPosition(Offset position) => state = position;
+  return page.nodePositions[nodeId] ?? Offset.zero;
 }
 
 class EntriesGraph extends ConsumerStatefulWidget {
@@ -170,13 +172,16 @@ class _EntriesGraphState extends ConsumerState<EntriesGraph> with SingleTickerPr
   }
 
   void _initializeNodePositions() {
+    final page = ref.read(currentPageProvider);
+    if (page == null) return;
+
     final entryIds = ref.read(graphableEntryIdsProvider);
     for (int i = 0; i < entryIds.length; i++) {
       final id = entryIds[i];
-      final pos = ref.read(nodePositionProvider(id));
-      if (pos == Offset.zero) {
+      final pos = page.nodePositions[id];
+      if (pos == null) {
         final initialOffset = Offset(100.0 + 200.0 * i, 100.0);
-        ref.read(nodePositionProvider(id).notifier).setPosition(initialOffset);
+        page.updateNodePosition(ref.passing, id, initialOffset);
       }
     }
   }
@@ -286,7 +291,20 @@ class _EntriesGraphState extends ConsumerState<EntriesGraph> with SingleTickerPr
                           (position.dx + details.delta.dx).clamp(0.0, double.infinity),
                           (position.dy + details.delta.dy).clamp(0.0, double.infinity),
                         );
-                        ref.read(nodePositionProvider(id).notifier).setPosition(newPos);
+                        // Immediately update local position for smooth dragging
+                        final page = ref.read(currentPageProvider);
+                        if (page != null) {
+                          page.syncUpdateNodePosition(ref.passing, id, newPos);
+                        }
+                      },
+                      onPanEnd: (details) {
+                        // Since the client who is panning gets predicted updates, we can update all the other clients on pan end
+                        final position = ref.read(nodePositionProvider(id));
+
+                        final page = ref.read(currentPageProvider);
+                        if (page != null) {
+                          page.updateNodePosition(ref.passing, id, position);
+                        }
                       },
                       child: EntryNode(entryId: id, key: ValueKey(id)),
                     ),

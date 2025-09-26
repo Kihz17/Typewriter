@@ -148,6 +148,25 @@ enum PageType {
   }
 }
 
+// Helper functions for Offset JSON serialization
+Map<String, Offset> _nodePositionsFromJson(Map<String, dynamic>? json) {
+  if (json == null) return {};
+  return json.map((key, value) => MapEntry(
+    key,
+    Offset(
+      (value['dx'] as num).toDouble(),
+      (value['dy'] as num).toDouble(),
+    ),
+  ));
+}
+
+Map<String, dynamic> _nodePositionsToJson(Map<String, Offset> positions) {
+  return positions.map((key, value) => MapEntry(
+    key,
+    {'dx': value.dx, 'dy': value.dy},
+  ));
+}
+
 @freezed
 class Page with _$Page {
   const factory Page({
@@ -157,6 +176,11 @@ class Page with _$Page {
     @Default([]) List<Entry> entries,
     @Default("") String chapter,
     @Default(0) int priority,
+    @JsonKey(
+      fromJson: _nodePositionsFromJson,
+      toJson: _nodePositionsToJson,
+    )
+    @Default({}) Map<String, Offset> nodePositions,
   }) = _Page;
 
   factory Page.fromJson(Map<String, dynamic> json) => _$PageFromJson(json);
@@ -191,6 +215,33 @@ extension PageExtension on Page {
     await ref
         .read(communicatorProvider)
         .changePageValue(id, "priority", newPriority);
+  }
+
+  Future<void> updateNodePosition(
+    PassingRef ref,
+    String entryId,
+    Offset position,
+  ) async {
+    updatePage(
+      ref,
+      (page) => page.copyWith(
+        nodePositions: {...page.nodePositions, entryId: position},
+      ),
+    );
+    await ref.read(communicatorProvider).updateNodePosition(id, entryId, position);
+  }
+
+  void syncUpdateNodePosition(
+    PassingRef ref,
+    String entryId,
+    Offset position,
+  ) {
+    updatePage(
+      ref,
+      (page) => page.copyWith(
+        nodePositions: {...page.nodePositions, entryId: position},
+      ),
+    );
   }
 
   Future<void> createEntry(PassingRef ref, Entry entry) async {
@@ -275,13 +326,18 @@ extension PageExtension on Page {
     ref.read(communicatorProvider).deleteEntry(id, entry.id);
     updatePage(
       ref,
-      (page) => page.copyWith(
-        entries: [
-          ...page.entries
-              .where((e) => e.id != entry.id)
-              .map((e) => _removedReferencesFromEntry(ref, e, entry.id)),
-        ],
-      ),
+      (page) {
+        final newNodePositions = Map<String, Offset>.from(page.nodePositions);
+        newNodePositions.remove(entry.id);
+        return page.copyWith(
+          entries: [
+            ...page.entries
+                .where((e) => e.id != entry.id)
+                .map((e) => _removedReferencesFromEntry(ref, e, entry.id)),
+          ],
+          nodePositions: newNodePositions,
+        );
+      },
     );
     // Also delete all references to this entry from other pages.
     ref.read(bookProvider).pages.where((page) => page.id != id).forEach((page) {

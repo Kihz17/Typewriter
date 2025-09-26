@@ -129,6 +129,18 @@ class ClientSynchronizer : KoinComponent {
         }
     }
 
+    fun handleUpdateNodePosition(client: SocketIOClient, data: String, ack: AckRequest) {
+        val update = gson.fromJson(data, NodePositionUpdate::class.java)
+        val result = stagingManager.changePageValue(
+            update.pageId,
+            "nodePositions.${update.entryId}",
+            update.position
+        )
+        ack.sendResult(result) {
+            communicationHandler.server?.broadcastOperations?.sendEvent("updateNodePosition", client, data)
+        }
+    }
+
     fun handlePublish(client: SocketIOClient, data: String, ack: AckRequest) {
         Dispatchers.Sync.launch {
             val result = stagingManager.publish()
@@ -272,4 +284,10 @@ private data class ContentModeRequest(
     @SerializedName("contentMode")
     val contentModeClassName: String,
     val data: Map<String, Any>,
+)
+
+private data class NodePositionUpdate(
+    val pageId: String,
+    val entryId: String,
+    val position: JsonObject
 )
