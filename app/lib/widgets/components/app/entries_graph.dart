@@ -28,8 +28,21 @@ List<Entry> graphableEntries(Ref ref) {
 
 @riverpod
 List<String> graphableEntryIds(Ref ref) {
-  final entries = ref.watch(graphableEntriesProvider);
-  return entries.map((entry) => entry.id).toList();
+  final currentPageEntries = ref.watch(graphableEntriesProvider);
+  final currentPageEntryIds = currentPageEntries.map((entry) => entry.id).toSet();
+
+  // Get all triggered entries from current page entries
+  final triggeredEntryIds = <String>{};
+  for (final entry in currentPageEntries) {
+    final triggerIds = ref.watch(entryTriggersProvider(entry.id));
+    if (triggerIds != null) {
+      triggeredEntryIds.addAll(triggerIds);
+    }
+  }
+
+  // Combine current page entries with triggered entries
+  final allEntryIds = {...currentPageEntryIds, ...triggeredEntryIds};
+  return allEntryIds.toList();
 }
 
 @riverpod
@@ -106,10 +119,13 @@ class EntriesGraph extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final entryIds = ref.watch(graphableEntryIdsProvider);
     final edges = ref.watch(triggerEdgesProvider);
+    final currentPageEntries = ref.watch(graphableEntriesProvider);
+    final currentPageEntryIds = currentPageEntries.map((entry) => entry.id).toSet();
 
     return DraggableGraph(
       entryIds: entryIds,
       edges: edges,
+      currentPageEntryIds: currentPageEntryIds,
       emptyTitle: "There are no graphable entries on this page.",
       emptyButtonText: "Add Entry",
       onEmptyButtonPressed: () => ref.read(searchProvider.notifier).asBuilder()

@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:ui';
 
 import "package:flutter/material.dart";
 import "package:hooks_riverpod/hooks_riverpod.dart";
+import "package:typewriter/models/entry.dart";
 import "package:typewriter/models/page.dart";
 import "package:typewriter/pages/page_editor.dart";
 import "package:typewriter/utils/passing_reference.dart";
@@ -17,6 +19,7 @@ class DraggableGraph extends ConsumerStatefulWidget {
   final String emptyTitle;
   final String emptyButtonText;
   final VoidCallback onEmptyButtonPressed;
+  final Set<String>? currentPageEntryIds; // Optional: entries that are on current page
 
   const DraggableGraph({
     super.key,
@@ -25,6 +28,7 @@ class DraggableGraph extends ConsumerStatefulWidget {
     required this.emptyTitle,
     required this.emptyButtonText,
     required this.onEmptyButtonPressed,
+    this.currentPageEntryIds,
   });
 
   @override
@@ -37,6 +41,7 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
   List<String> _visibleNodes = [];
   Timer? _throttleTimer;
   late final AnimationController _animController;
+  String? _lastPageId; // Track current page ID to detect page changes
 
   // In-memory storage for node sizes and measurement keys
   final Map<String, Size> _nodeSizes = {};
@@ -55,10 +60,17 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
     // Listen for viewport changes (pan/zoom)
     _controller.addListener(_onViewportChanged);
 
+    // Initialize page tracking
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final page = ref.read(currentPageProvider);
+      _lastPageId = page?.id;
+    });
+
     // Initialize viewport culling immediately
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onViewportChanged();
       _initializeNodePositions();
+      _relocateOutlierNodes();
       _centerCameraOnNodes();
     });
   }
@@ -67,8 +79,12 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
   void didUpdateWidget(covariant DraggableGraph oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Check if the entry IDs changed (indicating a page change)
-    if (widget.entryIds != oldWidget.entryIds) {
+    // Only center camera on actual page navigation, not content changes
+    final currentPage = ref.read(currentPageProvider);
+    final newPageId = currentPage?.id;
+
+    if (_lastPageId != newPageId) {
+      _lastPageId = newPageId;
       // Schedule camera centering after the frame is built
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _centerCameraOnNodes();
@@ -89,12 +105,23 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
     final page = ref.read(currentPageProvider);
     if (page == null) return;
 
+    final currentPageEntryIds = widget.currentPageEntryIds ?? {};
+
     for (int i = 0; i < widget.entryIds.length; i++) {
       final id = widget.entryIds[i];
       final pos = page.nodePositions[id];
       if (pos == null) {
-        final initialOffset = Offset(100.0 + 200.0 * i, 100.0);
-        page.updateNodePosition(ref.passing, id, initialOffset);
+        final isCurrentPageEntry = currentPageEntryIds.contains(id);
+
+        if (isCurrentPageEntry) {
+          // Use simple sequential positioning for same-page entries
+          final initialOffset = Offset(100.0 + 200.0 * i, 100.0);
+          page.updateNodePosition(ref.passing, id, initialOffset);
+        } else {
+          // Use smart positioning for external entries to avoid overlaps
+          final initialOffset = _generateInitialPosition(id);
+          page.updateNodePosition(ref.passing, id, initialOffset);
+        }
       }
     }
   }
@@ -106,7 +133,24 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
       return Offset.zero;
     }
 
-    return page.nodePositions[nodeId] ?? Offset.zero;
+    // Check if position exists, if not generate and store a new one
+    final existingPosition = page.nodePositions[nodeId];
+    if (existingPosition != null) {
+      return existingPosition;
+    }
+
+    // Generate initial position for external entries
+    final newPosition = _generateInitialPosition(nodeId);
+
+    // Store the position immediately so it persists
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final currentPage = ref.read(currentPageProvider);
+      if (currentPage != null) {
+        currentPage.updateNodePosition(ref.passing, nodeId, newPosition);
+      }
+    });
+
+    return newPosition;
   }
 
   void _measureNodeIfNeeded(String nodeId) {
@@ -178,6 +222,179 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
 
     // Remove keys for nodes that are no longer in entryIds
     _nodeKeys.removeWhere((nodeId, _) => !currentEntrySet.contains(nodeId));
+  }
+
+  Offset _generateInitialPosition(String nodeId) {
+    final page = ref.read(currentPageProvider);
+    if (page == null) return Offset.zero;
+
+    // Get all existing positions to avoid overlaps
+    final existingPositions = page.nodePositions.values.toList();
+
+    // Base position calculation - start after existing same-page entries
+    const double baseX = 100.0;
+    const double baseY = 100.0;
+    const double spacingX = 200.0;
+    const double spacingY = 120.0;
+
+    // Find a position that doesn't overlap with existing nodes
+    int attempts = 0;
+    const int maxAttempts = 100;
+
+    while (attempts < maxAttempts) {
+      final candidateX = baseX + (attempts % 10) * spacingX;
+      final candidateY = baseY + (attempts ~/ 10) * spacingY;
+      final candidatePos = Offset(candidateX, candidateY);
+
+      // Check if this position is too close to any existing position
+      bool hasOverlap = false;
+      for (final existingPos in existingPositions) {
+        final distance = (candidatePos - existingPos).distance;
+        if (distance < 150.0) { // Minimum distance between nodes
+          hasOverlap = true;
+          break;
+        }
+      }
+
+      if (!hasOverlap) {
+        return candidatePos;
+      }
+
+      attempts++;
+    }
+
+    // Fallback: if we can't find a good position, use a basic offset
+    return Offset(baseX + existingPositions.length * spacingX, baseY);
+  }
+
+  Widget _buildNodeWidget(WidgetRef ref, String entryId) {
+    // If currentPageEntryIds is not provided, use EntryNode for all (backward compatibility)
+    if (widget.currentPageEntryIds == null) {
+      return EntryNode(entryId: entryId, key: ValueKey(entryId));
+    }
+
+    // Check if entry is on current page
+    final isOnCurrentPage = widget.currentPageEntryIds!.contains(entryId);
+
+    if (isOnCurrentPage) {
+      return EntryNode(entryId: entryId, key: ValueKey(entryId));
+    } else {
+      // Entry is on a different page, use ExternalEntryNode
+      final entry = ref.watch(globalEntryProvider(entryId));
+      if (entry == null) {
+        return EntryNode(entryId: entryId, key: ValueKey(entryId)); // Fallback
+      }
+
+      final pageId = ref.watch(entryPageIdProvider(entryId));
+      if (pageId == null) {
+        return EntryNode(entryId: entryId, key: ValueKey(entryId)); // Fallback
+      }
+
+      return ExternalEntryNode(
+        pageId: pageId,
+        entry: entry,
+        key: ValueKey(entryId),
+      );
+    }
+  }
+
+  void _relocateOutlierNodes() {
+    final page = ref.read(currentPageProvider);
+    if (page == null) return;
+
+    final positions = Map<String, Offset>.from(page.nodePositions);
+    if (positions.length < 2) return; // Need at least 2 nodes
+
+    final outliers = <String, Offset>{};
+
+    // Find outliers (nodes >20k from nearest neighbor)
+    for (final entry in positions.entries) {
+      final nodeId = entry.key;
+      final nodePos = entry.value;
+
+      double minDistance = double.infinity;
+      for (final otherEntry in positions.entries) {
+        if (otherEntry.key == nodeId) continue;
+        final distance = (nodePos - otherEntry.value).distance;
+        if (distance < minDistance) {
+          minDistance = distance;
+        }
+      }
+
+      if (minDistance > 20000) {
+        outliers[nodeId] = nodePos;
+      }
+    }
+
+    // Relocate outliers closer to cluster
+    if (outliers.isNotEmpty) {
+      _relocateToCluster(outliers, positions);
+    }
+  }
+
+  void _relocateToCluster(Map<String, Offset> outliers, Map<String, Offset> allPositions) {
+    // Calculate cluster center (excluding outliers)
+    final clusterPositions = allPositions.entries
+        .where((entry) => !outliers.containsKey(entry.key))
+        .map((entry) => entry.value)
+        .toList();
+
+    if (clusterPositions.isEmpty) return;
+
+    // Find cluster centroid
+    double avgX = clusterPositions.map((pos) => pos.dx).reduce((a, b) => a + b) / clusterPositions.length;
+    double avgY = clusterPositions.map((pos) => pos.dy).reduce((a, b) => a + b) / clusterPositions.length;
+    final clusterCenter = Offset(avgX, avgY);
+
+    // Relocate each outlier
+    for (final outlierEntry in outliers.entries) {
+      final nodeId = outlierEntry.key;
+      final newPosition = _findClusterEdgePosition(clusterCenter, clusterPositions, nodeId);
+
+      // Update position
+      final page = ref.read(currentPageProvider);
+      page?.updateNodePosition(ref.passing, nodeId, newPosition);
+    }
+  }
+
+  Offset _findClusterEdgePosition(Offset clusterCenter, List<Offset> clusterPositions, String nodeId) {
+    // Find cluster boundary
+    double maxDistanceFromCenter = 0;
+    for (final pos in clusterPositions) {
+      final distance = (pos - clusterCenter).distance;
+      if (distance > maxDistanceFromCenter) {
+        maxDistanceFromCenter = distance;
+      }
+    }
+
+    // Place outlier just outside cluster boundary
+    const double bufferDistance = 300.0; // Space from cluster edge
+    final placementRadius = maxDistanceFromCenter + bufferDistance;
+
+    // Try different angles to find non-overlapping position
+    for (int angle = 0; angle < 360; angle += 30) {
+      final radians = angle * (pi / 180);
+      final candidatePos = Offset(
+        clusterCenter.dx + placementRadius * cos(radians),
+        clusterCenter.dy + placementRadius * sin(radians),
+      );
+
+      // Check for overlaps with existing nodes
+      bool hasOverlap = false;
+      for (final pos in clusterPositions) {
+        if ((candidatePos - pos).distance < 200) {
+          hasOverlap = true;
+          break;
+        }
+      }
+
+      if (!hasOverlap) {
+        return candidatePos;
+      }
+    }
+
+    // Fallback: place at cluster center + offset
+    return Offset(clusterCenter.dx + 200, clusterCenter.dy);
   }
 
   void _centerCameraOnNodes() {
@@ -319,7 +536,7 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
                       },
                       child: KeyedSubtree(
                         key: _nodeKeys[id],
-                        child: EntryNode(entryId: id, key: ValueKey(id)),
+                        child: _buildNodeWidget(ref, id),
                       ),
                     ),
                   );

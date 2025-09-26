@@ -28,8 +28,26 @@ List<Entry> manifestEntries(Ref ref) {
 
 @riverpod
 List<String> manifestEntryIds(Ref ref) {
-  final entries = ref.watch(manifestEntriesProvider);
-  return entries.map((entry) => entry.id).toList();
+  final currentPageEntries = ref.watch(manifestEntriesProvider);
+  final currentPageEntryIds = currentPageEntries.map((entry) => entry.id).toSet();
+
+  // Get all referenced manifest entries from current page entries
+  final referencedEntryIds = <String>{};
+  for (final entry in currentPageEntries) {
+    final referenceEntryIds = ref.watch(entryReferencesProvider(entry.id));
+    if (referenceEntryIds != null) {
+      for (final referenceEntryId in referenceEntryIds) {
+        final referenceTags = ref.watch(entryTagsProvider(referenceEntryId));
+        if (referenceTags.contains("manifest") && referenceEntryId != entry.id) {
+          referencedEntryIds.add(referenceEntryId);
+        }
+      }
+    }
+  }
+
+  // Combine current page entries with referenced entries
+  final allEntryIds = {...currentPageEntryIds, ...referencedEntryIds};
+  return allEntryIds.toList();
 }
 
 @riverpod
@@ -80,13 +98,11 @@ Map<String, Set<String>> manifestEdges(Ref ref) {
       continue;
     }
 
-    // Only include references to manifest entries that are on the current page
-    final entryIds = ref.watch(manifestEntryIdsProvider);
+    // Include all manifest references regardless of page
     final manifestReferences = referenceEntryIds.where((referenceEntryId) {
       final referenceTags = ref.watch(entryTagsProvider(referenceEntryId));
       return referenceTags.contains("manifest") &&
-             referenceEntryId != entry.id &&
-             entryIds.contains(referenceEntryId);
+             referenceEntryId != entry.id;
     }).toSet();
 
     edges[entry.id] = manifestReferences;
@@ -102,10 +118,13 @@ class ManifestView extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final entryIds = ref.watch(manifestEntryIdsProvider);
     final edges = ref.watch(manifestEdgesProvider);
+    final currentPageEntries = ref.watch(manifestEntriesProvider);
+    final currentPageEntryIds = currentPageEntries.map((entry) => entry.id).toSet();
 
     return DraggableGraph(
       entryIds: entryIds,
       edges: edges,
+      currentPageEntryIds: currentPageEntryIds,
       emptyTitle: "There are no manifest entries on this page.",
       emptyButtonText: "Add Entry",
       onEmptyButtonPressed: () => ref.read(searchProvider.notifier).asBuilder()
