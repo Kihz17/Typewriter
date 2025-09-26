@@ -38,6 +38,10 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
   Timer? _throttleTimer;
   late final AnimationController _animController;
 
+  // In-memory storage for node sizes and measurement keys
+  final Map<String, Size> _nodeSizes = {};
+  final Map<String, GlobalKey> _nodeKeys = {};
+
   @override
   void initState() {
     super.initState();
@@ -91,6 +95,22 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
     return page.nodePositions[nodeId] ?? Offset.zero;
   }
 
+  void _measureNodeIfNeeded(String nodeId) {
+    if (_nodeSizes[nodeId] != null) return; // Already measured
+
+    final key = _nodeKeys[nodeId];
+    if (key?.currentContext != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final renderBox = key!.currentContext?.findRenderObject() as RenderBox?;
+        if (renderBox != null && mounted) {
+          setState(() {
+            _nodeSizes[nodeId] = renderBox.size;
+          });
+        }
+      });
+    }
+  }
+
   void _onViewportChanged() {
     // Throttle viewport changes to avoid flooding rebuilds
     if (_throttleTimer?.isActive ?? false) return;
@@ -123,7 +143,22 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
         _visibleRect = newVisibleRect;
         _visibleNodes = newVisibleNodes;
       });
+
+      // Clean up sizes and keys for nodes that are no longer visible
+      _cleanupOffscreenNodes();
     });
+  }
+
+  void _cleanupOffscreenNodes() {
+    final visibleSet = _visibleNodes.toSet();
+    final currentEntrySet = widget.entryIds.toSet();
+
+    // Remove sizes for nodes that are no longer visible or no longer in entryIds
+    _nodeSizes.removeWhere((nodeId, _) =>
+      !visibleSet.contains(nodeId) && !currentEntrySet.contains(nodeId));
+
+    // Remove keys for nodes that are no longer in entryIds
+    _nodeKeys.removeWhere((nodeId, _) => !currentEntrySet.contains(nodeId));
   }
 
   @override
@@ -161,6 +196,8 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
                     edges: widget.edges,
                     visibleNodes: _visibleNodes,
                     dashOffset: _animController.value,
+                    nodeSizes: _nodeSizes,
+                    onNodeSizeNeeded: _measureNodeIfNeeded,
                   ),
                 );
               },
@@ -170,6 +207,9 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
               return Consumer( // Wrap in consumer to isolate the provider, meaning when we drag a node, the entire graph does not need to update
                 builder: (context, ref, _) {
                   final position = _getNodePosition(id);
+
+                  // Ensure node has a GlobalKey for measurement
+                  _nodeKeys[id] ??= GlobalKey();
 
                   return Positioned(
                     left: position.dx,
@@ -195,7 +235,10 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
                           page.updateNodePosition(ref.passing, id, position);
                         }
                       },
-                      child: EntryNode(entryId: id, key: ValueKey(id)),
+                      child: KeyedSubtree(
+                        key: _nodeKeys[id],
+                        child: EntryNode(entryId: id, key: ValueKey(id)),
+                      ),
                     ),
                   );
                 },
@@ -214,12 +257,16 @@ class EdgePainter extends CustomPainter {
   final List<String> visibleNodes;
   final double dashOffset; // 0..1
   final Color color;
+  final Map<String, Size> nodeSizes;
+  final void Function(String) onNodeSizeNeeded;
 
   EdgePainter({
     required this.positions,
     required this.edges,
     required this.visibleNodes,
     required this.dashOffset,
+    required this.nodeSizes,
+    required this.onNodeSizeNeeded,
     this.color = Colors.green,
   });
 
@@ -230,7 +277,6 @@ class EdgePainter extends CustomPainter {
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 
-    final edgeOffset = Offset(100, 25);
     final arrowSize = 6.0; // length of arrow lines
     final arrowWidth = 7.0; // angle at tip
     final arrowSpacing = 20.0; // distance between arrows along edge
@@ -238,14 +284,30 @@ class EdgePainter extends CustomPainter {
     final points = <Offset>[];
 
     edges.forEach((fromId, toIds) {
-      final from = (positions[fromId] ?? Offset.zero) + edgeOffset;
+      // Get actual sizes or defaults, trigger measurement if needed
+      final fromSize = nodeSizes[fromId] ?? const Size(120, 60);
+      if (nodeSizes[fromId] == null) {
+        onNodeSizeNeeded(fromId);
+      }
+
+      // Calculate center offset for from node
+      final fromOffset = Offset(fromSize.width / 2, fromSize.height / 2);
+      final from = (positions[fromId] ?? Offset.zero) + fromOffset;
 
       final visibleFrom = visibleNodes.contains(fromId);
 
       for (final toId in toIds) {
         if (!visibleNodes.contains(toId) && !visibleFrom) continue;
 
-        final to = (positions[toId] ?? Offset.zero) + edgeOffset;
+        // Get actual sizes or defaults, trigger measurement if needed
+        final toSize = nodeSizes[toId] ?? const Size(120, 60);
+        if (nodeSizes[toId] == null) {
+          onNodeSizeNeeded(toId);
+        }
+
+        // Calculate center offset for to node
+        final toOffset = Offset(toSize.width / 2, toSize.height / 2);
+        final to = (positions[toId] ?? Offset.zero) + toOffset;
 
         final direction = to - from;
         final length = direction.distance;
@@ -282,6 +344,7 @@ class EdgePainter extends CustomPainter {
     return positions != oldDelegate.positions ||
         edges != oldDelegate.edges ||
         visibleNodes != oldDelegate.visibleNodes ||
+        nodeSizes != oldDelegate.nodeSizes ||
         (dashOffset - oldDelegate.dashOffset).abs() > 0.01;
   }
 }
