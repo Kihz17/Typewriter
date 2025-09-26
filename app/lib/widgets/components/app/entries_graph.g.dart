@@ -23,7 +23,7 @@ final graphableEntriesProvider = AutoDisposeProvider<List<Entry>>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef GraphableEntriesRef = AutoDisposeProviderRef<List<Entry>>;
-String _$graphableEntryIdsHash() => r'80228ea635d8a323eb54cfc0e07ea895fc2fbb5c';
+String _$graphableEntryIdsHash() => r'd5e0c1923aefde0ae78495b6755c45da616a27dd';
 
 /// See also [graphableEntryIds].
 @ProviderFor(graphableEntryIds)

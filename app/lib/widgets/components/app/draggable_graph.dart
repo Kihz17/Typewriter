@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import "package:flutter/material.dart";
 import "package:hooks_riverpod/hooks_riverpod.dart";
+import "package:riverpod_annotation/riverpod_annotation.dart";
 import "package:typewriter/models/entry.dart";
 import "package:typewriter/models/page.dart";
 import "package:typewriter/pages/page_editor.dart";
@@ -11,7 +12,23 @@ import "package:typewriter/utils/passing_reference.dart";
 import "package:typewriter/widgets/components/app/empty_screen.dart";
 import "package:typewriter/widgets/components/app/entry_node.dart";
 
+part "draggable_graph.g.dart";
+
 const double kVirtualCanvasSize = 200000;
+
+// Provider to hold the current viewport center getter function
+@Riverpod(keepAlive: true)
+class ViewportCenterGetter extends _$ViewportCenterGetter {
+  @override
+  Offset Function()? build() {
+    return null;
+  }
+
+  void setGetter(Offset Function()? getter) {
+    debugPrint("DEBUG: ViewportCenterGetter.setGetter called with ${getter != null ? 'non-null' : 'null'} getter");
+    state = getter;
+  }
+}
 
 class DraggableGraph extends ConsumerStatefulWidget {
   final List<String> entryIds;
@@ -60,6 +77,13 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
     // Listen for viewport changes (pan/zoom)
     _controller.addListener(_onViewportChanged);
 
+    // Register viewport center getter immediately
+    debugPrint("DEBUG: Registering viewport center getter in DraggableGraph initState");
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(viewportCenterGetterProvider.notifier).setGetter(getViewportCenter);
+      debugPrint("DEBUG: Viewport center getter registered successfully in initState");
+    });
+
     // Initialize page tracking
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final page = ref.read(currentPageProvider);
@@ -95,6 +119,9 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
 
   @override
   void dispose() {
+    // Clear viewport center getter
+    ref.read(viewportCenterGetterProvider.notifier).setGetter(null);
+
     _controller.removeListener(_onViewportChanged);
     _controller.dispose();
     _throttleTimer?.cancel();
@@ -472,6 +499,22 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
 
     // Apply the transformation
     _controller.value = matrix;
+  }
+
+  // Method to get viewport center in world coordinates
+  Offset getViewportCenter() {
+    final matrix = _controller.value;
+    final screenSize = MediaQuery.of(context).size;
+
+    // Screen center in screen coordinates
+    final screenCenter = Offset(screenSize.width / 2, screenSize.height / 2);
+
+    // Transform screen center to world coordinates
+    final inverseMatrix = Matrix4.inverted(matrix);
+    final worldCenter = MatrixUtils.transformPoint(inverseMatrix, screenCenter);
+
+    debugPrint("DEBUG: getViewportCenter() called - screen: $screenCenter, world: $worldCenter");
+    return worldCenter;
   }
 
   @override

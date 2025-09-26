@@ -244,11 +244,23 @@ extension PageExtension on Page {
     );
   }
 
-  Future<void> createEntry(PassingRef ref, Entry entry) async {
+  Future<void> createEntry(PassingRef ref, Entry entry, {Offset? initialPosition}) async {
+    debugPrint("DEBUG: createEntry called for ${entry.id} with position: $initialPosition");
+
     updatePage(
       ref,
       (page) => _insertEntry(page, entry),
     );
+
+    // Set initial position if provided
+    if (initialPosition != null) {
+      debugPrint("DEBUG: Setting position $initialPosition for entry ${entry.id}");
+      await updateNodePosition(ref, entry.id, initialPosition);
+      debugPrint("DEBUG: Position set successfully for entry ${entry.id}");
+    } else {
+      debugPrint("DEBUG: No initial position provided for entry ${entry.id}");
+    }
+
     await ref.read(communicatorProvider).createEntry(id, entry);
   }
 
@@ -426,13 +438,14 @@ extension PageX on Page {
     PassingRef ref,
     EntryBlueprint blueprint, {
     required DataBlueprint? genericBlueprint,
+    Offset? initialPosition,
   }) async {
     final entry = Entry.fromBlueprint(
       id: getRandomString(),
       blueprint: blueprint,
       genericBlueprint: genericBlueprint,
     );
-    await createEntry(ref, entry);
+    await createEntry(ref, entry, initialPosition: initialPosition);
     return entry;
   }
 
@@ -561,7 +574,7 @@ extension PageX on Page {
     });
   }
 
-  Future<void> duplicateEntry(PassingRef ref, String entryId) async {
+  Future<void> duplicateEntry(PassingRef ref, String entryId, {Offset? initialPosition}) async {
     final entry = ref.read(globalEntryProvider(entryId));
     if (entry == null) return;
 
@@ -590,14 +603,15 @@ extension PageX on Page {
           ), // Remove all triggers
         )
         .copyWith("name", entry.name.incrementedName);
-    await createEntry(ref, newEntry);
+    await createEntry(ref, newEntry, initialPosition: initialPosition);
   }
 
   Future<void> linkWithDuplicate(
     PassingRef ref,
     String entryId,
-    String path,
-  ) async {
+    String path, {
+    Offset? initialPosition,
+  }) async {
     final entry = ref.read(globalEntryProvider(entryId));
     if (entry == null) return;
 
@@ -628,7 +642,7 @@ extension PageX on Page {
           ), // Remove all triggers
         )
         .copyWith("name", entry.name.incrementedName);
-    await createEntry(ref, newEntry);
+    await createEntry(ref, newEntry, initialPosition: initialPosition);
 
     await wireEntryToOtherEntry(ref, entry, newEntry.id, path);
   }

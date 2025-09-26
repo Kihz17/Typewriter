@@ -12,6 +12,7 @@ import "package:typewriter/utils/extensions.dart";
 import "package:typewriter/utils/icons.dart";
 import "package:typewriter/utils/passing_reference.dart";
 import "package:typewriter/utils/smart_single_activator.dart";
+import "package:typewriter/widgets/components/app/draggable_graph.dart";
 import "package:typewriter/widgets/components/app/page_search.dart";
 import "package:typewriter/widgets/components/app/search_bar.dart";
 import "package:typewriter/widgets/components/general/iconify.dart";
@@ -537,10 +538,25 @@ class AddEntrySearchElement extends SearchElement {
     Page page,
     EntryBlueprint blueprint,
   ) async {
+    // Get viewport center for new entry positioning
+    final viewportGetter = ref.read(viewportCenterGetterProvider);
+    debugPrint("DEBUG: ViewportGetter is ${viewportGetter != null ? 'NOT NULL' : 'NULL'}");
+
+    Offset? initialPosition = viewportGetter?.call();
+    debugPrint("DEBUG: InitialPosition from viewport: ${initialPosition != null ? '$initialPosition' : 'NULL'}");
+
+    // Fallback positioning if viewport center is unavailable
+    if (initialPosition == null) {
+      debugPrint("DEBUG: Using fallback positioning - viewport center unavailable");
+      // Use a reasonable default position visible in most viewports
+      initialPosition = const Offset(500, 300);
+    }
+
     final entry = await page.createEntryFromBlueprint(
       ref,
       blueprint,
       genericBlueprint: genericBlueprint,
+      initialPosition: initialPosition,
     );
     onAdded?.call(entry);
     final notifier = ref.read(inspectingEntryIdProvider.notifier);

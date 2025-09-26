@@ -23,7 +23,7 @@ final manifestEntriesProvider = AutoDisposeProvider<List<Entry>>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef ManifestEntriesRef = AutoDisposeProviderRef<List<Entry>>;
-String _$manifestEntryIdsHash() => r'1877c83a8be0ccf485c94b61a342b6dfcd727bc9';
+String _$manifestEntryIdsHash() => r'f992a43c8447c0f26bd7f02277eb8080233d4232';
 
 /// See also [manifestEntryIds].
 @ProviderFor(manifestEntryIds)
