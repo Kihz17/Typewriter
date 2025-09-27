@@ -89,6 +89,10 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
   final Map<String, Size> _nodeSizes = {};
   final Map<String, GlobalKey> _nodeKeys = {};
 
+  // Cursor tracking
+  Offset? _cursorWorldPosition;
+  bool _cursorInBounds = false;
+
   @override
   void initState() {
     super.initState();
@@ -227,6 +231,7 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
   void _onViewportChanged() {
     // Throttle viewport changes to avoid flooding rebuilds
     if (_throttleTimer?.isActive ?? false) return;
+
     _throttleTimer = Timer(const Duration(milliseconds: 50), () {
       _recalculateVisibleNodes();
     });
@@ -236,6 +241,27 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
     debugPrint("DEBUG: Graph update notification received, recalculating visible nodes");
     _recalculateVisibleNodes();
   }
+
+
+  void _updateCursorPosition(Offset screenPosition) {
+    if (!mounted) return;
+
+    try {
+      // Convert screen coordinates to world coordinates
+      final matrix = _controller.value;
+      final inverseMatrix = Matrix4.inverted(matrix);
+      final worldPosition = MatrixUtils.transformPoint(inverseMatrix, screenPosition);
+
+      setState(() {
+        _cursorWorldPosition = worldPosition;
+        _cursorInBounds = true;
+      });
+    } catch (e) {
+      // Handle potential matrix inversion errors
+      debugPrint("DEBUG: Error converting cursor position: $e");
+    }
+  }
+
 
   void _recalculateVisibleNodes() {
     final matrix = _controller.value;
@@ -571,83 +597,128 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
       );
     }
 
-    return InteractiveViewer(
-      transformationController: _controller,
-      constrained: false,
-      boundaryMargin: const EdgeInsets.all(1),
-      minScale: 0.1,
-      maxScale: 2.5,
-      child: SizedBox(
-        width: kVirtualCanvasSize,
-        height: kVirtualCanvasSize,
-        child: Stack(
-          children: [
-            // Paint edges only if their endpoints are visible
-            AnimatedBuilder(
-              animation: _animController,
-              builder: (context, child) {
-                final positions = widget.entryIds
-                    .map((id) => MapEntry(id, _getNodePosition(id)))
-                    .toMap();
+    return Stack(
+      children: [
+        // Main graph content
+        MouseRegion(
+          onEnter: (event) => _updateCursorPosition(event.localPosition),
+          onHover: (event) => _updateCursorPosition(event.localPosition),
+          onExit: (event) {
+            setState(() {
+              _cursorInBounds = false;
+              _cursorWorldPosition = null;
+            });
+          },
+          child: InteractiveViewer(
+            transformationController: _controller,
+            constrained: false,
+            boundaryMargin: const EdgeInsets.all(1),
+            minScale: 0.001,
+            maxScale: 2.5,
+            scaleFactor: 1000, // Zoom speed
+            interactionEndFrictionCoefficient: 1.0,   // disables panning momentum
+            child: SizedBox(
+              width: kVirtualCanvasSize,
+              height: kVirtualCanvasSize,
+              child: Stack(
+                children: [
+                    // Paint edges only if their endpoints are visible
+                    AnimatedBuilder(
+                      animation: _animController,
+                      builder: (context, child) {
+                        final positions = widget.entryIds
+                            .map((id) => MapEntry(id, _getNodePosition(id)))
+                            .toMap();
 
-                return CustomPaint(
-                  painter: EdgePainter(
-                    positions: positions,
-                    edges: widget.edges,
-                    visibleNodes: _visibleNodes,
-                    visibleRect: _visibleRect,
-                    dashOffset: _animController.value,
-                    nodeSizes: _nodeSizes,
-                    onNodeSizeNeeded: _measureNodeIfNeeded,
-                  ),
-                );
-              },
-            ),
-            // Render only visible nodes
-            ..._visibleNodes.map((id) {
-              return Consumer( // Wrap in consumer to isolate the provider, meaning when we drag a node, the entire graph does not need to update
-                builder: (context, ref, _) {
-                  final position = _getNodePosition(id);
-
-                  // Ensure node has a GlobalKey for measurement
-                  _nodeKeys[id] ??= GlobalKey();
-
-                  return Positioned(
-                    left: position.dx,
-                    top: position.dy,
-                    child: GestureDetector(
-                      onPanUpdate: (details) {
-                        final newPos = Offset(
-                          (position.dx + details.delta.dx).clamp(0.0, double.infinity),
-                          (position.dy + details.delta.dy).clamp(0.0, double.infinity),
+                        return CustomPaint(
+                          painter: EdgePainter(
+                            positions: positions,
+                            edges: widget.edges,
+                            visibleNodes: _visibleNodes,
+                            visibleRect: _visibleRect,
+                            dashOffset: _animController.value,
+                            nodeSizes: _nodeSizes,
+                            onNodeSizeNeeded: _measureNodeIfNeeded,
+                          ),
                         );
-                        // Immediately update local position for smooth dragging
-                        final page = ref.read(currentPageProvider);
-                        if (page != null) {
-                          page.syncUpdateNodePosition(ref.passing, id, newPos);
-                        }
                       },
-                      onPanEnd: (details) {
-                        // Since the client who is panning gets predicted updates, we can update all the other clients on pan end
-                        final position = _getNodePosition(id);
-
-                        final page = ref.read(currentPageProvider);
-                        if (page != null) {
-                          page.updateNodePosition(ref.passing, id, position);
-                        }
-                      },
-                      child: KeyedSubtree(
-                        key: _nodeKeys[id],
-                        child: _buildNodeWidget(ref, id),
-                      ),
                     ),
-                  );
-                },
-              );
-            }),
-          ],
+                    // Render only visible nodes
+                    ..._visibleNodes.map((id) {
+                      return Consumer( // Wrap in consumer to isolate the provider, meaning when we drag a node, the entire graph does not need to update
+                        builder: (context, ref, _) {
+                          final position = _getNodePosition(id);
+
+                          // Ensure node has a GlobalKey for measurement
+                          _nodeKeys[id] ??= GlobalKey();
+
+                          return Positioned(
+                            left: position.dx,
+                            top: position.dy,
+                            child: GestureDetector(
+                              onPanUpdate: (details) {
+                                final newPos = Offset(
+                                  (position.dx + details.delta.dx).clamp(0.0, double.infinity),
+                                  (position.dy + details.delta.dy).clamp(0.0, double.infinity),
+                                );
+                                // Immediately update local position for smooth dragging
+                                final page = ref.read(currentPageProvider);
+                                if (page != null) {
+                                  page.syncUpdateNodePosition(ref.passing, id, newPos);
+                                }
+                              },
+                              onPanEnd: (details) {
+                                // Since the client who is panning gets predicted updates, we can update all the other clients on pan end
+                                final position = _getNodePosition(id);
+
+                                final page = ref.read(currentPageProvider);
+                                if (page != null) {
+                                  page.updateNodePosition(ref.passing, id, position);
+                                }
+                              },
+                              child: KeyedSubtree(
+                                key: _nodeKeys[id],
+                                child: _buildNodeWidget(ref, id),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    }),
+                ],
+              ),
+            ),
+          ),
         ),
-      ),
+        // Cursor position overlay
+        if (_cursorInBounds && _cursorWorldPosition != null)
+          Positioned(
+            top: 16,
+            left: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black87,
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Text(
+                'World: (${_cursorWorldPosition!.dx.toStringAsFixed(1)}, ${_cursorWorldPosition!.dy.toStringAsFixed(1)})',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
