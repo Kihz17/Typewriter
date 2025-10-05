@@ -1,6 +1,9 @@
 package com.typewritermc.roadnetwork.content
 
 import com.extollit.gaming.ai.path.model.IPath
+import com.extollit.gaming.ai.path.model.Node
+import com.extollit.gaming.ai.path.model.Passibility
+import com.extollit.gaming.ai.path.model.PathObject
 import com.github.retrooper.packetevents.protocol.particle.Particle
 import com.github.retrooper.packetevents.protocol.particle.data.ParticleDustData
 import com.github.retrooper.packetevents.protocol.particle.type.ParticleTypes
@@ -23,7 +26,9 @@ import com.typewritermc.engine.paper.plugin
 import com.typewritermc.engine.paper.utils.*
 import com.typewritermc.roadnetwork.*
 import com.typewritermc.roadnetwork.gps.roadNetworkFindPath
+import com.typewritermc.roadnetwork.gps.roadNetworkFindPatheticPath
 import com.typewritermc.roadnetwork.pathfinding.instanceSpace
+import de.bsommerfeld.pathetic.api.pathing.result.PathState
 import kotlinx.coroutines.Dispatchers
 import lirand.api.extensions.events.unregister
 import lirand.api.extensions.server.registerEvents
@@ -40,6 +45,7 @@ import org.bukkit.inventory.ItemStack
 import org.koin.core.component.KoinComponent
 import java.time.Duration
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 
 class SelectedRoadNodeContentMode(
     context: ContentContext,
@@ -97,7 +103,7 @@ class SelectedRoadNodeContentMode(
             }
         }
 
-        +ModificationComponent(::selectedNode, ::network)
+        +ModificationComponent(::selectedNode, ::network, network.networkType)
 
         nodes({ network.nodes }, ::showingPosition) { node ->
             item = ItemStack(node.material(network.modifications))
@@ -153,12 +159,20 @@ class SelectedRoadNodeContentMode(
         }
 
         if (player.inventory.heldItemSlot == 5) {
-            edgeAddition(node)
+            if(network.networkType == NetworkType.EXPLICIT_LINKS) {
+                calculateAndAddEdge(node)
+            } else {
+                edgeAddition(node)
+            }
             return
         }
 
         if (player.inventory.heldItemSlot == 6) {
-            edgeRemoval(node)
+            if (network.networkType == NetworkType.EXPLICIT_LINKS) {
+                removeEdge(node)
+            } else {
+                edgeRemoval(node)
+            }
             return
         }
 
@@ -254,6 +268,90 @@ class SelectedRoadNodeContentMode(
 
         super.tick(deltaTime)
     }
+
+    private fun calculateAndAddEdge(targetNode: RoadNode) {
+        val currentSelectedNode = selectedNode
+        if (currentSelectedNode == null) {
+            return
+        }
+
+        if (targetNode == currentSelectedNode) {
+            return
+        }
+
+        // Check each direction individually
+        val hasForward = network.edges.containsEdge(selectedNodeId, targetNode.id)
+        val hasReverse = network.edges.containsEdge(targetNode.id, selectedNodeId)
+
+        // If both directions already exist, no work needed
+        if (hasForward && hasReverse) {
+            return
+        }
+
+        // Ensure both nodes are in the same world
+        if (currentSelectedNode.position.world != targetNode.position.world) {
+            return
+        }
+
+        // Calculate path using pathfinding
+        val interestingNodes = network.nodes.filter {
+            it != currentSelectedNode && it != targetNode && it.position.world == currentSelectedNode.position.world
+        }
+
+        val path = roadNetworkFindPath(
+            currentSelectedNode,
+            targetNode,
+            instance = currentSelectedNode.position.world.instanceSpace,
+            nodes = interestingNodes,
+            negativeNodes = network.negativeNodes
+        ) ?: return // Return if pathfinding fails
+
+        // Create edges for missing directions
+        val edgesToAdd = mutableListOf<RoadEdge>()
+        val weight = path.length().toDouble()
+        val length = path.length().toDouble()
+
+        if (!hasForward) {
+            edgesToAdd.add(RoadEdge(selectedNodeId, targetNode.id, weight, length))
+        }
+        if (!hasReverse) {
+            edgesToAdd.add(RoadEdge(targetNode.id, selectedNodeId, weight, length))
+        }
+
+        // Update network with new edges
+        editorComponent.updateAsync { roadNetwork ->
+            roadNetwork.copy(edges = roadNetwork.edges + edgesToAdd)
+        }
+
+        player.playSound("ui.button.click")
+    }
+
+    private fun removeEdge(targetNode: RoadNode) {
+        if (targetNode == selectedNode) {
+            return
+        }
+
+        // Check both directions for existing edges
+        val hasForward = network.edges.containsEdge(selectedNodeId, targetNode.id)
+        val hasReverse = network.edges.containsEdge(targetNode.id, selectedNodeId)
+
+        // If no edges exist in either direction, nothing to remove
+        if (!hasForward && !hasReverse) {
+            return
+        }
+
+        // Remove all existing edges between the nodes (both directions)
+        editorComponent.updateAsync { roadNetwork ->
+            roadNetwork.copy(
+                edges = roadNetwork.edges.filter {
+                    !((it.start == selectedNodeId && it.end == targetNode.id) ||
+                      (it.start == targetNode.id && it.end == selectedNodeId))
+                }
+            )
+        }
+
+        player.playSound("ui.button.click")
+    }
 }
 
 class RemoveNodeComponent(
@@ -276,55 +374,60 @@ private class SelectedNodePathsComponent(
     private val nodeFetcher: () -> RoadNode?,
     private val networkFetcher: () -> RoadNetwork,
 ) : ContentComponent {
-    private var paths: Map<RoadEdge, IPath>? = null
+    private var paths: ConcurrentHashMap<RoadEdge, IPath> = ConcurrentHashMap()
     val isPathsLoaded: Boolean
-        get() = paths != null
+        get() = !paths.isEmpty()
 
     override suspend fun initialize(player: Player) {
         Dispatchers.UntickedAsync.launch {
-            paths = loadEdgePaths()
+            loadEdgePaths()
         }
     }
 
-    private fun loadEdgePaths(): Map<RoadEdge, IPath> {
-        val node = nodeFetcher() ?: return emptyMap()
+    private fun loadEdgePaths() {
+        val node = nodeFetcher() ?: return
         val network = networkFetcher()
         val nodes = network.nodes.associateBy { it.id }
         val instance = node.position.world.instanceSpace
-        return network.edges.filter { it.start == node.id }
-            .mapNotNull { edge ->
-                val start = nodes[edge.start] ?: return@mapNotNull null
-                val end = nodes[edge.end] ?: return@mapNotNull null
 
-                val path = roadNetworkFindPath(
-                    start,
-                    end,
-                    instance = instance,
-                    nodes = network.nodes,
-                    negativeNodes = network.negativeNodes
-                ) ?: return@mapNotNull null
-                edge to path
+        paths.clear()
+
+        network.edges.filter { it.start == node.id }
+            .forEach { edge ->
+                val start = nodes[edge.start] ?: return@forEach
+                val end = nodes[edge.end] ?: return@forEach
+
+                val pathFuture = roadNetworkFindPatheticPath(start, end)
+
+                pathFuture.thenAccept { path ->
+                    if(path.pathState == PathState.FOUND) {
+                        val nodes = path.path.map { pathNode ->
+                            Node(pathNode.flooredX, pathNode.flooredY, pathNode.flooredZ, Passibility.passible)
+                        }.toTypedArray()
+
+                        paths[edge] = PathObject(1.0f, *nodes)
+                    }
+                }
             }
-            .toMap()
     }
 
     private fun refreshEdges() {
         val node = nodeFetcher() ?: return
         val network = networkFetcher()
         val edges = network.edges.filter { it.start == node.id }
-        if (paths?.keys?.toSet() == edges.toSet()) return
-        paths = loadEdgePaths()
+        if (paths.keys.toSet() == edges.toSet()) return
+        loadEdgePaths()
     }
 
     private var tick = 0
     override suspend fun tick(player: Player) {
-        if (paths == null) return
+        if (paths.isEmpty()) return
         if (tick++ % 20 == 0) {
             refreshEdges()
         }
         if (tick++ % 3 != 0) return
 
-        paths?.forEach { (edge, path) ->
+        paths.forEach { (edge, path) ->
             path.forEach {
                 WrapperPlayServerParticle(
                     Particle(
@@ -425,39 +528,72 @@ class NodeRadiusComponent(
 private class ModificationComponent(
     private val nodeFetcher: () -> RoadNode?,
     private val networkFetcher: () -> RoadNetwork,
+    private val networkType: NetworkType = NetworkType.AUTO_CONNECT,
 ) : ContentComponent, ItemsComponent {
     override fun items(player: Player): Map<Int, IntractableItem> {
         val map = mutableMapOf<Int, IntractableItem>()
         val node = nodeFetcher() ?: return map
         val network = networkFetcher()
 
-        map[5] = ItemStack(Material.EMERALD).apply {
-            editMeta { meta ->
-                meta.name = "<green><b>Add Fast Travel Connection"
-                meta.loreString = """
-                    |<line> <gray>Click on a unconnected node to <green>add a fast travel connection</green> to it.
-                    |<line> <gray>Click on a modified node to <red>remove the connection</red>.
-                    |
-                    |<line> <gray>If you only want to connect one way, hold <red>Shift</red> while clicking.
-                    |""".trimMargin()
-                meta.unClickable()
-            }
-        } onInteract {}
+        when (networkType) {
+            NetworkType.EXPLICIT_LINKS -> {
+                // For explicit networks, show edge calculation tools
+                map[5] = ItemStack(Material.EMERALD).apply {
+                    editMeta { meta ->
+                        meta.name = "<green><b>Add Edge"
+                        meta.loreString = """
+                            |<line> <gray>Click on a node to <green>add an edge</green> between them.
+                            |<line> <gray>The edge weight will be determined by pathfinding distance.
+                            |""".trimMargin()
+                        meta.unClickable()
+                    }
+                } onInteract {}
 
-        val hasEdges = network.edges.any { it.start == node.id }
-        if (hasEdges) {
-            map[6] = ItemStack(Material.REDSTONE).apply {
-                editMeta { meta ->
-                    meta.name = "<red><b>Remove Edge"
-                    meta.loreString = """
-                    |<line> <gray>Click on a connected node to <red>force remove the edge</red> between them.
-                    |<line> <gray>Click on a modified node to allow the edge to be added again.
-                    |
-                    |<line> <gray>If you only want to remove one way, hold <red>Shift</red> while clicking.
-                """.trimMargin()
-                    meta.unClickable()
+                val hasEdges = network.edges.any { it.start == node.id }
+                if (hasEdges) {
+                    map[6] = ItemStack(Material.REDSTONE).apply {
+                        editMeta { meta ->
+                            meta.name = "<red><b>Remove Edge"
+                            meta.loreString = """
+                            |<line> <gray>Click on a connected node to <red>remove the edge</red> between them.
+                            |<line> <gray>This will remove the calculated edge from the network.
+                            |""".trimMargin()
+                            meta.unClickable()
+                        }
+                    } onInteract {}
                 }
-            } onInteract {
+            }
+
+            NetworkType.AUTO_CONNECT -> {
+                // For auto-connect networks, show manual modification tools
+                map[5] = ItemStack(Material.EMERALD).apply {
+                    editMeta { meta ->
+                        meta.name = "<green><b>Add Fast Travel Connection"
+                        meta.loreString = """
+                            |<line> <gray>Click on a unconnected node to <green>add a fast travel connection</green> to it.
+                            |<line> <gray>Click on a modified node to <red>remove the connection</red>.
+                            |
+                            |<line> <gray>If you only want to connect one way, hold <red>Shift</red> while clicking.
+                            |""".trimMargin()
+                        meta.unClickable()
+                    }
+                } onInteract {}
+
+                val hasEdges = network.edges.any { it.start == node.id }
+                if (hasEdges) {
+                    map[6] = ItemStack(Material.REDSTONE).apply {
+                        editMeta { meta ->
+                            meta.name = "<red><b>Remove Edge"
+                            meta.loreString = """
+                            |<line> <gray>Click on a connected node to <red>force remove the edge</red> between them.
+                            |<line> <gray>Click on a modified node to allow the edge to be added again.
+                            |
+                            |<line> <gray>If you only want to remove one way, hold <red>Shift</red> while clicking.
+                            """.trimMargin()
+                            meta.unClickable()
+                        }
+                    } onInteract {}
+                }
             }
         }
 

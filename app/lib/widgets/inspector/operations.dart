@@ -5,6 +5,7 @@ import "package:typewriter/pages/page_editor.dart";
 import "package:typewriter/utils/extensions.dart";
 import "package:typewriter/utils/icons.dart";
 import "package:typewriter/utils/passing_reference.dart";
+import "package:typewriter/widgets/components/app/draggable_graph.dart";
 import "package:typewriter/widgets/components/app/entry_node.dart";
 import "package:typewriter/widgets/components/general/context_menu_region.dart";
 import "package:typewriter/widgets/components/general/filled_button.dart";
@@ -108,7 +109,18 @@ class _LinkWithDuplicate extends HookConsumerWidget {
         if (entryId.isNullOrEmpty) return;
         final path = await pathSelector(context, paths);
         if (path == null) return;
-        await page.linkWithDuplicate(ref.passing, entryId!, path);
+
+        // Get viewport center for new entry positioning
+        final viewportGetter = ref.read(viewportCenterGetterProvider);
+        Offset? initialPosition = viewportGetter?.call();
+
+        // Fallback positioning if viewport center is unavailable
+        if (initialPosition == null) {
+          debugPrint("DEBUG: Using fallback positioning for operations linkWithDuplicate - viewport center unavailable");
+          initialPosition = const Offset(500, 300);
+        }
+
+        await page.linkWithDuplicate(ref.passing, entryId!, path, initialPosition: initialPosition);
       },
       icon: const Iconify(TWIcons.duplicate),
       label: const Text("Link with Duplicate"),
@@ -128,7 +140,18 @@ class _DuplicateEntry extends HookConsumerWidget {
         if (page == null) return;
         final entryId = ref.read(inspectingEntryIdProvider);
         if (entryId.isNullOrEmpty) return;
-        page.duplicateEntry(ref.passing, entryId!);
+
+        // Get viewport center for new entry positioning
+        final viewportGetter = ref.read(viewportCenterGetterProvider);
+        Offset? initialPosition = viewportGetter?.call();
+
+        // Fallback positioning if viewport center is unavailable
+        if (initialPosition == null) {
+          debugPrint("DEBUG: Using fallback positioning for operations duplicate - viewport center unavailable");
+          initialPosition = const Offset(500, 300);
+        }
+
+        page.duplicateEntry(ref.passing, entryId!, initialPosition: initialPosition);
       },
       icon: const Iconify(TWIcons.duplicate),
       label: const Text("Duplicate"),

@@ -27,6 +27,8 @@ mixin _$Page {
   List<Entry> get entries => throw _privateConstructorUsedError;
   String get chapter => throw _privateConstructorUsedError;
   int get priority => throw _privateConstructorUsedError;
+  @JsonKey(fromJson: _nodePositionsFromJson, toJson: _nodePositionsToJson)
+  Map<String, Offset> get nodePositions => throw _privateConstructorUsedError;
 
   /// Serializes this Page to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -48,7 +50,9 @@ abstract class $PageCopyWith<$Res> {
       PageType type,
       List<Entry> entries,
       String chapter,
-      int priority});
+      int priority,
+      @JsonKey(fromJson: _nodePositionsFromJson, toJson: _nodePositionsToJson)
+      Map<String, Offset> nodePositions});
 }
 
 /// @nodoc
@@ -72,6 +76,7 @@ class _$PageCopyWithImpl<$Res, $Val extends Page>
     Object? entries = null,
     Object? chapter = null,
     Object? priority = null,
+    Object? nodePositions = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -98,6 +103,10 @@ class _$PageCopyWithImpl<$Res, $Val extends Page>
           ? _value.priority
           : priority // ignore: cast_nullable_to_non_nullable
               as int,
+      nodePositions: null == nodePositions
+          ? _value.nodePositions
+          : nodePositions // ignore: cast_nullable_to_non_nullable
+              as Map<String, Offset>,
     ) as $Val);
   }
 }
@@ -115,7 +124,9 @@ abstract class _$$PageImplCopyWith<$Res> implements $PageCopyWith<$Res> {
       PageType type,
       List<Entry> entries,
       String chapter,
-      int priority});
+      int priority,
+      @JsonKey(fromJson: _nodePositionsFromJson, toJson: _nodePositionsToJson)
+      Map<String, Offset> nodePositions});
 }
 
 /// @nodoc
@@ -136,6 +147,7 @@ class __$$PageImplCopyWithImpl<$Res>
     Object? entries = null,
     Object? chapter = null,
     Object? priority = null,
+    Object? nodePositions = null,
   }) {
     return _then(_$PageImpl(
       id: null == id
@@ -162,6 +174,10 @@ class __$$PageImplCopyWithImpl<$Res>
           ? _value.priority
           : priority // ignore: cast_nullable_to_non_nullable
               as int,
+      nodePositions: null == nodePositions
+          ? _value._nodePositions
+          : nodePositions // ignore: cast_nullable_to_non_nullable
+              as Map<String, Offset>,
     ));
   }
 }
@@ -175,8 +191,11 @@ class _$PageImpl implements _Page {
       required this.type,
       final List<Entry> entries = const [],
       this.chapter = "",
-      this.priority = 0})
-      : _entries = entries;
+      this.priority = 0,
+      @JsonKey(fromJson: _nodePositionsFromJson, toJson: _nodePositionsToJson)
+      final Map<String, Offset> nodePositions = const {}})
+      : _entries = entries,
+        _nodePositions = nodePositions;
 
   factory _$PageImpl.fromJson(Map<String, dynamic> json) =>
       _$$PageImplFromJson(json);
@@ -203,10 +222,18 @@ class _$PageImpl implements _Page {
   @override
   @JsonKey()
   final int priority;
+  final Map<String, Offset> _nodePositions;
+  @override
+  @JsonKey(fromJson: _nodePositionsFromJson, toJson: _nodePositionsToJson)
+  Map<String, Offset> get nodePositions {
+    if (_nodePositions is EqualUnmodifiableMapView) return _nodePositions;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableMapView(_nodePositions);
+  }
 
   @override
   String toString() {
-    return 'Page(id: $id, pageName: $pageName, type: $type, entries: $entries, chapter: $chapter, priority: $priority)';
+    return 'Page(id: $id, pageName: $pageName, type: $type, entries: $entries, chapter: $chapter, priority: $priority, nodePositions: $nodePositions)';
   }
 
   @override
@@ -221,13 +248,22 @@ class _$PageImpl implements _Page {
             const DeepCollectionEquality().equals(other._entries, _entries) &&
             (identical(other.chapter, chapter) || other.chapter == chapter) &&
             (identical(other.priority, priority) ||
-                other.priority == priority));
+                other.priority == priority) &&
+            const DeepCollectionEquality()
+                .equals(other._nodePositions, _nodePositions));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(runtimeType, id, pageName, type,
-      const DeepCollectionEquality().hash(_entries), chapter, priority);
+  int get hashCode => Object.hash(
+      runtimeType,
+      id,
+      pageName,
+      type,
+      const DeepCollectionEquality().hash(_entries),
+      chapter,
+      priority,
+      const DeepCollectionEquality().hash(_nodePositions));
 
   /// Create a copy of Page
   /// with the given fields replaced by the non-null parameter values.
@@ -252,7 +288,9 @@ abstract class _Page implements Page {
       required final PageType type,
       final List<Entry> entries,
       final String chapter,
-      final int priority}) = _$PageImpl;
+      final int priority,
+      @JsonKey(fromJson: _nodePositionsFromJson, toJson: _nodePositionsToJson)
+      final Map<String, Offset> nodePositions}) = _$PageImpl;
 
   factory _Page.fromJson(Map<String, dynamic> json) = _$PageImpl.fromJson;
 
@@ -269,6 +307,9 @@ abstract class _Page implements Page {
   String get chapter;
   @override
   int get priority;
+  @override
+  @JsonKey(fromJson: _nodePositionsFromJson, toJson: _nodePositionsToJson)
+  Map<String, Offset> get nodePositions;
 
   /// Create a copy of Page
   /// with the given fields replaced by the non-null parameter values.

@@ -99,6 +99,7 @@ class CommunicationHandler : KoinComponent {
         )
         server?.addEventListener("reorderEntry", String::class.java, clientSynchronizer::handleReorderEntry)
         server?.addEventListener("deleteEntry", String::class.java, clientSynchronizer::handleDeleteEntry)
+        server?.addEventListener("updateNodePosition", String::class.java, clientSynchronizer::handleUpdateNodePosition)
 
         server?.addEventListener("publish", String::class.java, clientSynchronizer::handlePublish)
 

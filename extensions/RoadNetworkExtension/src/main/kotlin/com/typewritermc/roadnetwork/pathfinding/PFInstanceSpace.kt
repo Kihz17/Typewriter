@@ -11,6 +11,10 @@ import com.typewritermc.engine.paper.plugin
 import com.typewritermc.engine.paper.utils.server
 import com.typewritermc.engine.paper.utils.toBukkitWorld
 import com.typewritermc.engine.paper.utils.toWorld
+import de.bsommerfeld.pathetic.api.pathing.context.EnvironmentContext
+import de.bsommerfeld.pathetic.api.provider.NavigationPoint
+import de.bsommerfeld.pathetic.api.provider.NavigationPointProvider
+import de.bsommerfeld.pathetic.api.wrapper.PathPosition
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,11 +29,11 @@ import org.koin.java.KoinJavaComponent
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
-class PFInstanceSpace(val world: com.typewritermc.core.utils.point.World) : IInstanceSpace {
+class PFInstanceSpace(val world: com.typewritermc.core.utils.point.World) : IInstanceSpace, NavigationPointProvider  {
     private val chunkSpaces = Long2ObjectOpenHashMap<PFColumnarSpace>()
     private var lastAccess = System.currentTimeMillis()
 
-    override fun blockObjectAt(x: Int, y: Int, z: Int): IBlockObject {
+    override fun blockObjectAt(x: Int, y: Int, z: Int): PFBlock {
         val chunkX = x shr 4
         val chunkZ = z shr 4
 
@@ -77,6 +81,14 @@ class PFInstanceSpace(val world: com.typewritermc.core.utils.point.World) : IIns
             chunkSpaces[key] = space
         }
         return space
+    }
+
+    override fun getNavigationPoint(
+        p0: PathPosition?,
+        p1: EnvironmentContext?
+    ): NavigationPoint? {
+        if (p0 == null) return null
+        return blockObjectAt(p0.x.toInt(), p0.y.toInt(), p0.z.toInt())
     }
 }
 

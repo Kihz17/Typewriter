@@ -11,6 +11,7 @@ import com.typewritermc.core.utils.UntickedAsync
 import com.typewritermc.core.utils.launch
 import com.typewritermc.engine.paper.logger
 import com.typewritermc.engine.paper.plugin
+import de.bsommerfeld.pathetic.bukkit.PatheticBukkit
 import kotlinx.coroutines.*
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -42,6 +43,8 @@ class RoadNetworkManager : Initializable, KoinComponent {
                 editors.asMap().values.forEach { it.refresh() }
             }
         }
+
+        PatheticBukkit.initialize(plugin)
     }
 
     private fun loadRoadNetwork(id: String): CompletableDeferred<RoadNetwork> {

@@ -219,6 +219,10 @@ class SocketNotifier extends StateNotifier<Socket?> {
       ..on(
         "updateWriters",
         (data) => ref.read(communicatorProvider).handleUpdateWriters(data),
+      )
+      ..on(
+        "updateNodePosition",
+        (data) => ref.read(communicatorProvider).handleUpdateNodePosition(data),
       );
 
     await ref.read(communicatorProvider).fetchBook();
@@ -457,6 +461,27 @@ class Communicator {
     );
   }
 
+  Future<void> updateNodePosition(
+    String pageId,
+    String entryId,
+    Offset position,
+  ) async {
+    final socket = ref.read(socketProvider);
+    if (socket == null || !socket.connected) {
+      return;
+    }
+
+    final data = {
+      "pageId": pageId,
+      "entryId": entryId,
+      "position": {"dx": position.dx, "dy": position.dy},
+    };
+
+    handleAck(
+      await socket.emitWithAckAsync("updateNodePosition", jsonEncode(data)),
+    );
+  }
+
   Future<void> requestContentMode(
     String contentModeClassPath,
     Map<String, dynamic> data,
@@ -588,6 +613,23 @@ class Communicator {
 
   void handleUpdateWriters(dynamic data) {
     ref.read(writersProvider.notifier).syncWriters(data);
+  }
+
+  void handleUpdateNodePosition(dynamic data) {
+    final json = jsonDecode(data as String) as Map<String, dynamic>;
+    final pageId = json["pageId"] as String;
+    final entryId = json["entryId"] as String;
+    final positionData = json["position"] as Map<String, dynamic>;
+
+    final position = Offset(
+      (positionData["dx"] as num).toDouble(),
+      (positionData["dy"] as num).toDouble(),
+    );
+
+    final page = ref.read(pageProvider(pageId));
+    if (page == null) return;
+
+    page.syncUpdateNodePosition(ref.passing, entryId, position);
   }
 
   void handleAck(dynamic data) {

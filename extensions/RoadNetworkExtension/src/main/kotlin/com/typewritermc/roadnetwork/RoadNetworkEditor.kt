@@ -4,11 +4,14 @@ import com.typewritermc.core.entries.Ref
 import com.typewritermc.core.utils.UntickedAsync
 import com.typewritermc.core.utils.launch
 import com.typewritermc.roadnetwork.gps.roadNetworkFindPath
+import com.typewritermc.roadnetwork.gps.roadNetworkFindPatheticPath
 import com.typewritermc.roadnetwork.pathfinding.PFInstanceSpace
 import com.typewritermc.roadnetwork.pathfinding.instanceSpace
+import de.bsommerfeld.pathetic.api.pathing.result.PathState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -63,15 +66,32 @@ class RoadNetworkEditor(
         jobRecalculateEdges?.cancel()
 
         jobRecalculateEdges = Dispatchers.UntickedAsync.launch {
-            update {
-                it.copy(edges = emptyList())
-            }
-            recalculateEdges.set(network.nodes.size)
-            coroutineScope {
-                network.nodes.map {
-                    launch {
-                        recalculateEdgesForNode(it, it.position.world.instanceSpace)
-                        recalculateEdges.decrementAndGet()
+            when (network.networkType) {
+                NetworkType.AUTO_CONNECT -> {
+                    // Clear all edges and recalculate from scratch
+                    update {
+                        it.copy(edges = emptyList())
+                    }
+                    recalculateEdges.set(network.nodes.size)
+                    coroutineScope {
+                        network.nodes.map {
+                            launch {
+                                recalculateEdgesForNode(it, it.position.world.instanceSpace)
+                                recalculateEdges.decrementAndGet()
+                            }
+                        }
+                    }
+                }
+                NetworkType.EXPLICIT_LINKS -> {
+                    // Recalculate weight and length for existing edges
+                    recalculateEdges.set(network.edges.size)
+                    coroutineScope {
+                        network.edges.map { edge ->
+                            launch {
+                                recalculateExistingEdge(edge)
+                                recalculateEdges.decrementAndGet()
+                            }
+                        }
                     }
                 }
             }
@@ -107,6 +127,31 @@ class RoadNetworkEditor(
 
         update { roadNetwork ->
             roadNetwork.copy(edges = roadNetwork.edges.filter { it.start != node.id } + edges)
+        }
+    }
+
+    private suspend fun recalculateExistingEdge(edge: RoadEdge) {
+        val startNode = network.nodes.find { it.id == edge.start } ?: return
+        val endNode = network.nodes.find { it.id == edge.end } ?: return
+
+        val path = roadNetworkFindPatheticPath(
+            startNode,
+            endNode
+        ).await()
+
+        if(path.pathState == PathState.FOUND) {
+            val newWeight = path.path.length().toDouble()
+            val newLength = path.path.length().toDouble()
+
+            val updatedEdge = edge.copy(weight = newWeight, length = newLength)
+
+            update { roadNetwork ->
+                roadNetwork.copy(edges = roadNetwork.edges.map {
+                    if (it.start == edge.start && it.end == edge.end) updatedEdge else it
+                })
+            }
+        } else {
+            throw Exception("Failed to calculate edge from " + startNode.id + " to " + endNode.id + " (" + path.pathState.name + ")" )
         }
     }
 

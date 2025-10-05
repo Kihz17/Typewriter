@@ -12,6 +12,7 @@ import "package:typewriter/utils/extensions.dart";
 import "package:typewriter/utils/icons.dart";
 import "package:typewriter/utils/passing_reference.dart";
 import "package:typewriter/utils/popups.dart";
+import "package:typewriter/widgets/components/app/draggable_graph.dart";
 import "package:typewriter/widgets/components/app/entry_search.dart";
 import "package:typewriter/widgets/components/app/search_bar.dart";
 import "package:typewriter/widgets/components/general/toasts.dart";
@@ -148,6 +149,25 @@ enum PageType {
   }
 }
 
+// Helper functions for Offset JSON serialization
+Map<String, Offset> _nodePositionsFromJson(Map<String, dynamic>? json) {
+  if (json == null) return {};
+  return json.map((key, value) => MapEntry(
+    key,
+    Offset(
+      (value['dx'] as num).toDouble(),
+      (value['dy'] as num).toDouble(),
+    ),
+  ));
+}
+
+Map<String, dynamic> _nodePositionsToJson(Map<String, Offset> positions) {
+  return positions.map((key, value) => MapEntry(
+    key,
+    {'dx': value.dx, 'dy': value.dy},
+  ));
+}
+
 @freezed
 class Page with _$Page {
   const factory Page({
@@ -157,6 +177,11 @@ class Page with _$Page {
     @Default([]) List<Entry> entries,
     @Default("") String chapter,
     @Default(0) int priority,
+    @JsonKey(
+      fromJson: _nodePositionsFromJson,
+      toJson: _nodePositionsToJson,
+    )
+    @Default({}) Map<String, Offset> nodePositions,
   }) = _Page;
 
   factory Page.fromJson(Map<String, dynamic> json) => _$PageFromJson(json);
@@ -193,12 +218,55 @@ extension PageExtension on Page {
         .changePageValue(id, "priority", newPriority);
   }
 
-  Future<void> createEntry(PassingRef ref, Entry entry) async {
+  Future<void> updateNodePosition(
+    PassingRef ref,
+    String entryId,
+    Offset position,
+  ) async {
+    updatePage(
+      ref,
+      (page) => page.copyWith(
+        nodePositions: {...page.nodePositions, entryId: position},
+      ),
+    );
+    await ref.read(communicatorProvider).updateNodePosition(id, entryId, position);
+  }
+
+  void syncUpdateNodePosition(
+    PassingRef ref,
+    String entryId,
+    Offset position,
+  ) {
+    updatePage(
+      ref,
+      (page) => page.copyWith(
+        nodePositions: {...page.nodePositions, entryId: position},
+      ),
+    );
+  }
+
+  Future<void> createEntry(PassingRef ref, Entry entry, {Offset? initialPosition}) async {
+    debugPrint("DEBUG: createEntry called for ${entry.id} with position: $initialPosition");
+
     updatePage(
       ref,
       (page) => _insertEntry(page, entry),
     );
+
+    // Set initial position if provided
+    if (initialPosition != null) {
+      debugPrint("DEBUG: Setting position $initialPosition for entry ${entry.id}");
+      await updateNodePosition(ref, entry.id, initialPosition);
+      debugPrint("DEBUG: Position set successfully for entry ${entry.id}");
+    } else {
+      debugPrint("DEBUG: No initial position provided for entry ${entry.id}");
+    }
+
     await ref.read(communicatorProvider).createEntry(id, entry);
+
+    // Notify graph of node creation
+    debugPrint("DEBUG: Notifying graph of entry creation for ${entry.id}");
+    ref.read(graphUpdateNotifierProvider.notifier).notifyGraphUpdate();
   }
 
   Future<void> updateEntireEntry(PassingRef ref, Entry entry) async {
@@ -254,6 +322,10 @@ extension PageExtension on Page {
   /// This should only be used to sync the entry from the server.
   void syncInsertEntry(PassingRef ref, Entry entry) {
     updatePage(ref, (page) => _insertEntry(page, entry));
+
+    // Notify graph of node sync insertion
+    debugPrint("DEBUG: Notifying graph of entry sync insertion for ${entry.id}");
+    ref.read(graphUpdateNotifierProvider.notifier).notifyGraphUpdate();
   }
 
   Page _insertEntry(Page page, Entry entry) {
@@ -275,13 +347,18 @@ extension PageExtension on Page {
     ref.read(communicatorProvider).deleteEntry(id, entry.id);
     updatePage(
       ref,
-      (page) => page.copyWith(
-        entries: [
-          ...page.entries
-              .where((e) => e.id != entry.id)
-              .map((e) => _removedReferencesFromEntry(ref, e, entry.id)),
-        ],
-      ),
+      (page) {
+        final newNodePositions = Map<String, Offset>.from(page.nodePositions);
+        newNodePositions.remove(entry.id);
+        return page.copyWith(
+          entries: [
+            ...page.entries
+                .where((e) => e.id != entry.id)
+                .map((e) => _removedReferencesFromEntry(ref, e, entry.id)),
+          ],
+          nodePositions: newNodePositions,
+        );
+      },
     );
     // Also delete all references to this entry from other pages.
     ref.read(bookProvider).pages.where((page) => page.id != id).forEach((page) {
@@ -292,6 +369,10 @@ extension PageExtension on Page {
     if (ref.read(inspectingEntryIdProvider) == entry.id) {
       ref.read(inspectingEntryIdProvider.notifier).clearSelection();
     }
+
+    // Notify graph of node deletion
+    debugPrint("DEBUG: Notifying graph of entry deletion for ${entry.id}");
+    ref.read(graphUpdateNotifierProvider.notifier).notifyGraphUpdate();
   }
 
   void removeReferencesTo(PassingRef ref, String entryId) {
@@ -361,6 +442,10 @@ extension PageExtension on Page {
             entries: [...entries.where((e) => e.id != entryId)],
           ),
         );
+
+    // Notify graph of node sync deletion
+    debugPrint("DEBUG: Notifying graph of entry sync deletion for $entryId");
+    ref.read(graphUpdateNotifierProvider.notifier).notifyGraphUpdate();
   }
 }
 
@@ -370,13 +455,14 @@ extension PageX on Page {
     PassingRef ref,
     EntryBlueprint blueprint, {
     required DataBlueprint? genericBlueprint,
+    Offset? initialPosition,
   }) async {
     final entry = Entry.fromBlueprint(
       id: getRandomString(),
       blueprint: blueprint,
       genericBlueprint: genericBlueprint,
     );
-    await createEntry(ref, entry);
+    await createEntry(ref, entry, initialPosition: initialPosition);
     return entry;
   }
 
@@ -505,7 +591,7 @@ extension PageX on Page {
     });
   }
 
-  Future<void> duplicateEntry(PassingRef ref, String entryId) async {
+  Future<void> duplicateEntry(PassingRef ref, String entryId, {Offset? initialPosition}) async {
     final entry = ref.read(globalEntryProvider(entryId));
     if (entry == null) return;
 
@@ -534,14 +620,15 @@ extension PageX on Page {
           ), // Remove all triggers
         )
         .copyWith("name", entry.name.incrementedName);
-    await createEntry(ref, newEntry);
+    await createEntry(ref, newEntry, initialPosition: initialPosition);
   }
 
   Future<void> linkWithDuplicate(
     PassingRef ref,
     String entryId,
-    String path,
-  ) async {
+    String path, {
+    Offset? initialPosition,
+  }) async {
     final entry = ref.read(globalEntryProvider(entryId));
     if (entry == null) return;
 
@@ -572,7 +659,7 @@ extension PageX on Page {
           ), // Remove all triggers
         )
         .copyWith("name", entry.name.incrementedName);
-    await createEntry(ref, newEntry);
+    await createEntry(ref, newEntry, initialPosition: initialPosition);
 
     await wireEntryToOtherEntry(ref, entry, newEntry.id, path);
   }

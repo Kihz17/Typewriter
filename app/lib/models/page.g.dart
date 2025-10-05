@@ -16,6 +16,10 @@ _$PageImpl _$$PageImplFromJson(Map<String, dynamic> json) => _$PageImpl(
           const [],
       chapter: json['chapter'] as String? ?? "",
       priority: (json['priority'] as num?)?.toInt() ?? 0,
+      nodePositions: json['nodePositions'] == null
+          ? const {}
+          : _nodePositionsFromJson(
+              json['nodePositions'] as Map<String, dynamic>?),
     );
 
 Map<String, dynamic> _$$PageImplToJson(_$PageImpl instance) =>
@@ -26,6 +30,7 @@ Map<String, dynamic> _$$PageImplToJson(_$PageImpl instance) =>
       'entries': instance.entries.map((e) => e.toJson()).toList(),
       'chapter': instance.chapter,
       'priority': instance.priority,
+      'nodePositions': _nodePositionsToJson(instance.nodePositions),
     };
 
 const _$PageTypeEnumMap = {

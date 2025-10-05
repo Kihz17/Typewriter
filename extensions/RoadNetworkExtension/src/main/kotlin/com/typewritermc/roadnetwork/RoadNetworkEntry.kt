@@ -65,11 +65,17 @@ interface RoadNodeCollectionEntry : Entry {
     val nodes: List<RoadNodeId>
 }
 
+enum class NetworkType {
+    AUTO_CONNECT,
+    EXPLICIT_LINKS
+}
+
 data class RoadNetwork(
     val nodes: List<RoadNode> = emptyList(),
     val edges: List<RoadEdge> = emptyList(),
     val modifications: List<RoadModification> = emptyList(),
     val negativeNodes: List<RoadNode> = emptyList(),
+    val networkType: NetworkType = NetworkType.AUTO_CONNECT,
 )
 
 @JvmInline
