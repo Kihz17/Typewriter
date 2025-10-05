@@ -30,3 +30,5 @@ gradleEnterprise {
         termsOfServiceAgree = "yes"
     }
 }
+include("RoadNetworkExtension:src:main:java")
+findProject(":RoadNetworkExtension:src:main:java")?.name = "java"

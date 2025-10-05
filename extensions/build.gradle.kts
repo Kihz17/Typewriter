@@ -12,8 +12,10 @@ allprojects {
     apply(plugin = "kotlin")
 
     repositories {
+        mavenLocal()
         // Required
         mavenCentral()
+        maven { url = uri("https://jitpack.io") }
     }
 
     val targetJavaVersion = 21
@@ -31,7 +33,7 @@ allprojects {
 
 subprojects {
     group = "com.typewritermc"
-    version = file("../../version.txt").readText().trim().substringBefore("-beta")
+    version = rootProject.file("../version.txt").readText().trim().substringBefore("-beta")
 
     apply(plugin = "io.github.goooler.shadow")
     apply(plugin = "com.typewritermc.module-plugin")

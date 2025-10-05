@@ -82,7 +82,7 @@ class RoadNetworkContentMode(context: ContentContext, player: Player) : ContentM
         +NetworkRecalculateAllEdgesComponent {
             editorComponent.recalculateEdges()
         }
-        +NetworkAddNodeComponent(::addRoadNode, ::addNegativeNode)
+        +NetworkAddNodeComponent(::addRoadNode, ::addNegativeNode, network.networkType)
         nodes({ network.nodes }, ::showingPosition) {
             item = ItemStack(it.material(network.modifications))
             glow = if (highlighting) NamedTextColor.WHITE else null
@@ -121,6 +121,7 @@ class RoadNetworkContentMode(context: ContentContext, player: Player) : ContentM
         +NegativeNodePulseComponent { network.negativeNodes }
 
         +NetworkEdgesComponent({ network.nodes }, { network.edges })
+
         return ok(Unit)
     }
 
@@ -182,6 +183,7 @@ fun RoadNode.material(modifications: List<RoadModification>): Material {
 private class NetworkAddNodeComponent(
     private val onAdd: (Position) -> Unit = {},
     private val onAddNegative: (Position) -> Unit = {},
+    private val networkType: NetworkType = NetworkType.AUTO_CONNECT,
 ) : ContentComponent, ItemsComponent {
     override fun items(player: Player): Map<Int, IntractableItem> {
         val addNodeItem = ItemStack(Material.DIAMOND).apply {
@@ -193,24 +195,27 @@ private class NetworkAddNodeComponent(
             if (it.type.isClick) onAdd(it.clickedBlock?.location?.toPosition()?.add(0.0, 1.0, 0.0) ?: player.position)
         }
 
-        val addNegativeNodeItem = ItemStack(Material.NETHERITE_INGOT).apply {
-            editMeta { meta ->
-                meta.name = "<red><b>Add Negative Node"
-                meta.loreString = """
-                |<line> <gray>Click to add a new negative node to the road network
-                |<line> <gray>Blocking pathfinding through its radius
-                """.trimMargin()
+        val items = mutableMapOf<Int, IntractableItem>(4 to addNodeItem)
+
+        // Only show negative node option for auto-connect networks
+        if (networkType != NetworkType.EXPLICIT_LINKS) {
+            val addNegativeNodeItem = ItemStack(Material.NETHERITE_INGOT).apply {
+                editMeta { meta ->
+                    meta.name = "<red><b>Add Negative Node"
+                    meta.loreString = """
+                    |<line> <gray>Click to add a new negative node to the road network
+                    |<line> <gray>Blocking pathfinding through its radius
+                    """.trimMargin()
+                }
+            } onInteract {
+                if (it.type.isClick) onAddNegative(
+                    it.clickedBlock?.location?.toPosition()?.add(0.0, 1.0, 0.0) ?: player.position
+                )
             }
-        } onInteract {
-            if (it.type.isClick) onAddNegative(
-                it.clickedBlock?.location?.toPosition()?.add(0.0, 1.0, 0.0) ?: player.position
-            )
+            items[5] = addNegativeNodeItem
         }
 
-        return mapOf(
-            4 to addNodeItem,
-            5 to addNegativeNodeItem
-        )
+        return items
     }
 
     override suspend fun initialize(player: Player) {}
@@ -244,7 +249,11 @@ private class NetworkRecalculateAllEdgesComponent(
         val item = ItemStack(Material.REDSTONE).apply {
             editMeta { meta ->
                 meta.name = "<red><b>Recalculate Edges"
-                meta.loreString = "<line> <gray>Click to recalculate all edges, this might take a while."
+                meta.loreString = """
+                    |<line> <gray>Click to recalculate edges using pathfinding
+                    |<line> <gray>Auto-connect: Regenerates all edges
+                    |<line> <gray>Explicit: Updates weight/length of existing edges
+                    """.trimMargin()
             }
         } onInteract {
             if (!it.type.isClick) return@onInteract

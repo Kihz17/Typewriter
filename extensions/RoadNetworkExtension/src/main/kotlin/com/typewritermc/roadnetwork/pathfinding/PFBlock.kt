@@ -5,6 +5,7 @@ import com.extollit.gaming.ai.path.model.IBlockObject
 import com.extollit.linalg.immutable.AxisAlignedBBox
 import com.typewritermc.core.utils.point.Position
 import com.typewritermc.engine.paper.utils.toBukkitLocation
+import de.bsommerfeld.pathetic.api.provider.NavigationPoint
 import io.papermc.paper.registry.RegistryAccess
 import io.papermc.paper.registry.RegistryKey
 import org.bukkit.Material
@@ -20,7 +21,7 @@ class PFBlock(
     val position: Position,
     val type: Material,
     val data: BlockData,
-) : IBlockDescription, IBlockObject {
+) : IBlockDescription, IBlockObject, NavigationPoint {
     private val collisionShape: VoxelShape by lazy(LazyThreadSafetyMode.NONE) {
         data.getCollisionShape(position.toBukkitLocation())
     }
@@ -68,6 +69,10 @@ class PFBlock(
 
     override fun isIncinerating(): Boolean {
         return type == Material.LAVA || type == Material.FIRE || type == Material.SOUL_FIRE || type == Material.MAGMA_BLOCK
+    }
+
+    override fun isTraversable(): Boolean {
+        return !type.isSolid || bounds().max.y - bounds().min.y <= 0.5 || type.name.endsWith("_SLAB")
     }
 }
 
