@@ -44,6 +44,11 @@ fun CommandTree.executePlayerOrTarget(block: ExecutionContext<CommandSourceStack
         }
     }
 
+    executePlayer(block)
+}
+
+
+fun CommandTree.executePlayer(block: ExecutionContext<CommandSourceStack>.(Player) -> Unit) {
     executes {
         (source.executor as? Player)?.let { player ->
             block(this, player)
@@ -53,11 +58,12 @@ fun CommandTree.executePlayerOrTarget(block: ExecutionContext<CommandSourceStack
             block(this, player)
             return@executes
         }
-        sender.msg("Provide a player to execute this command on.")
+        sender.msg("You must be a player to execute this command!")
     }
 }
 
 inline fun <reified E : Entry> CommandTree.entry(
     name: String,
+    noinline filter: Predicate<E> = { true },
     noinline block: ArgumentBlock<CommandSourceStack, E> = {},
-) = argument(name, EntryArgumentType(E::class), E::class, block)
+) = argument(name, EntryArgumentType(E::class, filter), E::class, block)

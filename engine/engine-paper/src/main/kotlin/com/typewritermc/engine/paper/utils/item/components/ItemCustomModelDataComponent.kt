@@ -2,28 +2,25 @@ package com.typewritermc.engine.paper.utils.item.components
 
 import com.typewritermc.core.books.pages.Colors
 import com.typewritermc.core.extension.annotations.AlgebraicTypeInfo
-import com.typewritermc.core.extension.annotations.Default
-import com.typewritermc.core.extension.annotations.InnerMin
-import com.typewritermc.core.extension.annotations.Min
 import com.typewritermc.core.interaction.InteractionContext
 import com.typewritermc.engine.paper.entry.entries.ConstVar
 import com.typewritermc.engine.paper.entry.entries.Var
 import com.typewritermc.engine.paper.entry.entries.get
+import com.typewritermc.engine.paper.utils.item.components.customModelDataTypes.CustomModelDataType
+import com.typewritermc.engine.paper.utils.item.components.customModelDataTypes.LegacyCustomModelData
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 
-@AlgebraicTypeInfo("amount", Colors.BLUE, "fa6-solid:hashtag")
-class ItemAmountComponent(
-    @InnerMin(Min(0))
-    @Default("1")
-    val amount: Var<Int> = ConstVar(1),
+@AlgebraicTypeInfo("custom_model_data", Colors.GREEN, "fa6-solid:shapes")
+class ItemCustomModelDataComponent(
+    val customModelData: Var<CustomModelDataType> = ConstVar(LegacyCustomModelData(0)),
 ) : ItemComponent {
     override fun apply(player: Player?, interactionContext: InteractionContext?, item: ItemStack) {
-        item.amount = amount.get(player, interactionContext) ?: 1
+        customModelData.get(player, interactionContext)?.apply(player, interactionContext, item)
     }
 
     override fun matches(player: Player?, interactionContext: InteractionContext?, item: ItemStack): Boolean {
-        val amount = amount.get(player, interactionContext) ?: 0
-        return item.amount == amount
+        val modelData = customModelData.get(player, interactionContext) ?: return false
+        return modelData.matches(player, interactionContext, item)
     }
 }

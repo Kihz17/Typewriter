@@ -22,24 +22,31 @@ fun StringReader.error(message: String): Nothing {
     throw SimpleCommandExceptionType(LiteralMessage(message)).createWithContext(this)
 }
 
+typealias Predicate<T> = (T) -> Boolean
+
 inline fun <S, reified E : Entry> DslCommandTree<S, *>.entry(
     name: String,
+    noinline filter: Predicate<E> = { true },
     noinline block: ArgumentBlock<S, E> = {},
-) = argument(name, EntryArgumentType(E::class), E::class, block)
+) = argument(name, EntryArgumentType(E::class, filter), E::class, block)
 
 fun <S, E : Entry> DslCommandTree<S, *>.entry(
     name: String,
     klass: KClass<E>,
+    filter: Predicate<E> = { true },
     block: ArgumentBlock<S, E> = {},
-) = argument(name, EntryArgumentType(klass), klass, block)
+) = argument(name, EntryArgumentType(klass, filter), klass, block)
 
 class EntryArgumentType<E : Entry>(
     val klass: KClass<E>,
+    val filter: Predicate<E>,
 ) : CustomArgumentType.Converted<E, String> {
     override fun convert(nativeType: String): E {
-        return Query.findById(klass, nativeType)
+        val entry = Query.findById(klass, nativeType)
             ?: Query.findByName(klass, nativeType)
             ?: throw SimpleCommandExceptionType(LiteralMessage("Could not find entry $nativeType")).create()
+        if (!filter(entry)) throw SimpleCommandExceptionType(LiteralMessage("Entry did not pass filter")).create()
+        return entry
     }
 
     override fun getNativeType(): ArgumentType<String> = StringArgumentType.word()
@@ -50,6 +57,7 @@ class EntryArgumentType<E : Entry>(
     ): CompletableFuture<Suggestions> {
         val input = builder.remaining
         Query.findWhere(klass) { entry ->
+            if (!filter(entry)) return@findWhere false
             entry.name.startsWith(input) || (input.length > 3 && entry.id.startsWith(input))
         }.forEach {
             builder.suggest(it.name)
