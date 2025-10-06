@@ -78,6 +78,7 @@ class SelectedNegativeNodeContentMode(
             item = ItemStack(Material.NETHERITE_BLOCK)
             glow = if (it.id == selectedNodeId) NamedTextColor.BLACK else null
             scale = Vector3f(0.5f, 0.5f, 0.5f)
+            label = it.id.toString()
             onInteract {
                 if (it.id == selectedNodeId) {
                     ContentPopTrigger.triggerFor(player, context())

@@ -18,15 +18,21 @@ import com.typewritermc.engine.paper.content.*
 import com.typewritermc.engine.paper.content.components.*
 import com.typewritermc.engine.paper.entry.triggerFor
 import com.typewritermc.engine.paper.extensions.packetevents.sendPacketTo
+import com.typewritermc.engine.paper.plugin
 import com.typewritermc.engine.paper.snippets.snippet
 import com.typewritermc.engine.paper.utils.*
 import com.typewritermc.roadnetwork.*
+import io.papermc.paper.event.player.AsyncChatEvent
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
+import lirand.api.extensions.events.listen
+import lirand.api.extensions.events.unregister
 import net.kyori.adventure.bossbar.BossBar
 import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.Color
 import org.bukkit.Material
 import org.bukkit.entity.Player
+import org.bukkit.event.EventPriority
 import org.bukkit.inventory.ItemStack
 import org.koin.core.component.KoinComponent
 import java.time.Duration
@@ -46,7 +52,7 @@ class RoadNetworkContentMode(context: ContentContext, player: Player) : ContentM
     private var cycle = 0L
 
     // If all nodes need to be highlighted
-    private var highlighting = false
+    private var highlighting = true
 
     private val network get() = editorComponent.network
 
@@ -87,6 +93,7 @@ class RoadNetworkContentMode(context: ContentContext, player: Player) : ContentM
             item = ItemStack(it.material(network.modifications))
             glow = if (highlighting) NamedTextColor.WHITE else null
             scale = Vector3f(0.5f, 0.5f, 0.5f)
+            label = it.id.toString()
             onInteract {
                 ContentModeTrigger(
                     context,
@@ -105,6 +112,7 @@ class RoadNetworkContentMode(context: ContentContext, player: Player) : ContentM
             item = ItemStack(Material.NETHERITE_BLOCK)
             glow = if (highlighting) NamedTextColor.BLACK else null
             scale = Vector3f(0.5f, 0.5f, 0.5f)
+            label = it.id.toString()
             onInteract {
                 ContentModeTrigger(
                     context,
@@ -130,18 +138,40 @@ class RoadNetworkContentMode(context: ContentContext, player: Player) : ContentM
         highlighting = !highlighting
     }
 
-    private fun createNode(position: Position): RoadNode {
+    private fun createNode(position: Position, nodeId: String): RoadNode {
         val centerLocation = position.center().withRotation(0f, 0f)
-        var id: Int
-        do {
-            id = Random().nextInt(Int.MAX_VALUE)
-        } while (network.nodes.any { it.id.id == id })
-        return RoadNode(RoadNodeId(id), centerLocation, 1.0)
+        return RoadNode(RoadNodeId(nodeId), centerLocation, 1.0)
+    }
+
+    private suspend fun awaitChatInput(player: Player): String {
+        val deferred = CompletableDeferred<String>()
+        var listener: org.bukkit.event.Listener? = null
+        listener = plugin.listen<AsyncChatEvent>(
+            priority = EventPriority.LOWEST,
+            ignoreCancelled = false
+        ) { event ->
+            if (event.player.uniqueId != player.uniqueId) return@listen
+            event.isCancelled = true
+            deferred.complete(event.message().plainText())
+            listener?.unregister()
+        }
+        return deferred.await()
     }
 
     private fun addRoadNode(position: Position) = Dispatchers.UntickedAsync.launch {
-        val node = createNode(position)
+        player.sendMessage("<yellow>Enter a unique node ID in chat:".asMini())
+        val nodeId = awaitChatInput(player)
+
+        if (network.nodes.any { it.id == RoadNodeId(nodeId) }) {
+            player.sendMessage("<red>Node ID '$nodeId' already exists! Node creation cancelled.".asMini())
+            player.playSound("block.note_block.bass", pitch = 0.5f)
+            return@launch
+        }
+
+        val node = createNode(position, nodeId)
         editorComponent.update { it.copy(nodes = it.nodes + node) }
+        player.sendMessage("<green>Created node with ID: $nodeId".asMini())
+        player.playSound("entity.experience_orb.pickup")
         ContentModeTrigger(
             context,
             SelectedRoadNodeContentMode(context, player, ref, node.id, true)
@@ -149,8 +179,19 @@ class RoadNetworkContentMode(context: ContentContext, player: Player) : ContentM
     }
 
     private fun addNegativeNode(position: Position) = Dispatchers.UntickedAsync.launch {
-        val node = createNode(position)
+        player.sendMessage("<yellow>Enter a unique node ID in chat:".asMini())
+        val nodeId = awaitChatInput(player)
+
+        if (network.negativeNodes.any { it.id == RoadNodeId(nodeId) }) {
+            player.sendMessage("<red>Node ID '$nodeId' already exists! Node creation cancelled.".asMini())
+            player.playSound("block.note_block.bass", pitch = 0.5f)
+            return@launch
+        }
+
+        val node = createNode(position, nodeId)
         editorComponent.update { it.copy(negativeNodes = it.negativeNodes + node) }
+        player.sendMessage("<green>Created negative node with ID: $nodeId".asMini())
+        player.playSound("entity.experience_orb.pickup")
         ContentModeTrigger(
             context,
             SelectedNegativeNodeContentMode(context, player, ref, node.id, true)

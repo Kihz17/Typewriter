@@ -79,8 +79,8 @@ data class RoadNetwork(
 )
 
 @JvmInline
-value class RoadNodeId(val id: Int = 0) {
-    override fun toString(): String = id.toString()
+value class RoadNodeId(val id: String = "") {
+    override fun toString(): String = id
 }
 
 data class RoadNode(
@@ -184,12 +184,40 @@ fun Collection<RoadModification>.containsAddition(start: RoadNodeId, end: RoadNo
 fun createRoadNetworkParser(): Gson = GsonBuilder()
     .registerTypeAdapter(Position::class.java, PositionSerializer())
     .registerTypeAdapter(World::class.java, WorldSerializer())
+    .registerTypeAdapter(RoadNodeId::class.java, RoadNodeIdAdapter())
     .registerTypeAdapterFactory(
         RuntimeTypeAdapterFactory.of(RoadModification::class.java)
             .registerSubtype(RoadModification.EdgeAddition::class.java)
             .registerSubtype(RoadModification.EdgeRemoval::class.java)
     )
     .create()
+
+class RoadNodeIdAdapter : com.google.gson.TypeAdapter<RoadNodeId>() {
+    override fun write(out: com.google.gson.stream.JsonWriter, value: RoadNodeId?) {
+        if (value == null) {
+            out.nullValue()
+        } else {
+            out.value(value.id)
+        }
+    }
+
+    override fun read(`in`: com.google.gson.stream.JsonReader): RoadNodeId {
+        return when (`in`.peek()) {
+            com.google.gson.stream.JsonToken.NUMBER -> {
+                // Migration: Convert old Int IDs to String
+                val intId = `in`.nextInt()
+                RoadNodeId(intId.toString())
+            }
+            com.google.gson.stream.JsonToken.STRING -> {
+                RoadNodeId(`in`.nextString())
+            }
+            else -> {
+                `in`.skipValue()
+                RoadNodeId("")
+            }
+        }
+    }
+}
 
 class SelectRoadNodeContentMode(context: ContentContext, player: Player) : ContentMode(context, player) {
     private lateinit var editorComponent: RoadNetworkEditorComponent
@@ -225,7 +253,7 @@ class SelectRoadNodeContentMode(context: ContentContext, player: Player) : Conte
             scale = Vector3f(0.5f, 0.5f, 0.5f)
 
             onInteract {
-                val value = node.id.id
+                val value = node.id
                 entry.ref().fieldValue(fieldPath, value)
                 ContentPopTrigger.triggerFor(player, context())
             }
@@ -279,17 +307,17 @@ class SelectRoadNodeCollectionContentMode(context: ContentContext, player: Playe
         nodes({ network.nodes }, ::showingPosition) { node ->
             item = ItemStack(node.material(network.modifications))
             glow = when {
-                nodes.any { it.id == node.id.id } -> NamedTextColor.BLUE
+                nodes.any { it == node.id } -> NamedTextColor.BLUE
                 else -> NamedTextColor.WHITE
             }
             scale = Vector3f(0.5f, 0.5f, 0.5f)
 
             onInteract {
-                val value = node.id.id
-                val newNodes = if (nodes.any { it.id == value }) {
-                    nodes.filter { it.id != value }
+                val value = node.id
+                val newNodes = if (nodes.any { it == value }) {
+                    nodes.filter { it != value }
                 } else {
-                    nodes + RoadNodeId(value)
+                    nodes + value
                 }
                 ref.fieldValue(fieldPath, newNodes)
                 nodes = newNodes

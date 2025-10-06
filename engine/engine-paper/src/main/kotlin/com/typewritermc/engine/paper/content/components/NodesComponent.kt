@@ -12,11 +12,14 @@ import com.typewritermc.engine.paper.events.AsyncFakeEntityInteract
 import com.typewritermc.engine.paper.extensions.packetevents.meta
 import com.typewritermc.engine.paper.extensions.packetevents.toPacketItem
 import com.typewritermc.engine.paper.plugin
+import com.typewritermc.engine.paper.utils.asMini
 import com.typewritermc.engine.paper.utils.position
 import com.typewritermc.engine.paper.utils.toPacketLocation
 import lirand.api.extensions.events.unregister
 import lirand.api.extensions.server.registerEvents
+import me.tofaa.entitylib.meta.display.AbstractDisplayMeta
 import me.tofaa.entitylib.meta.display.ItemDisplayMeta
+import me.tofaa.entitylib.meta.display.TextDisplayMeta
 import me.tofaa.entitylib.meta.other.InteractionMeta
 import me.tofaa.entitylib.wrapper.WrapperEntity
 import net.kyori.adventure.text.format.TextColor
@@ -98,6 +101,7 @@ class NodeDisplayBuilder {
     var glow: TextColor? = null
     var interaction: () -> Unit = {}
     var scale: Vector3f = Vector3f(1.0f, 1.0f, 1.0f)
+    var label: String? = null
 
     fun onInteract(action: () -> Unit) {
         interaction = action
@@ -109,6 +113,7 @@ private class NodeDisplay {
         WrapperEntity(EntityTypes.ITEM_DISPLAY)
     private val interaction =
         WrapperEntity(EntityTypes.INTERACTION)
+    private var textDisplay: WrapperEntity? = null
     private var onInteract: () -> Unit = {}
     val entityId: Int
         get() = interaction.entityId
@@ -125,6 +130,30 @@ private class NodeDisplay {
             width = max(builder.scale.x, builder.scale.z)
             height = builder.scale.y
         }
+
+        // Update text display
+        if (builder.label != null) {
+            if (textDisplay == null) {
+                textDisplay = WrapperEntity(EntityTypes.TEXT_DISPLAY)
+            }
+            textDisplay?.meta<TextDisplayMeta> {
+                text = builder.label!!.asMini()
+                isSeeThrough = false
+                isShadow = false
+                billboardConstraints = AbstractDisplayMeta.BillboardConstraints.CENTER
+                positionRotationInterpolationDuration = 30
+            }
+        } else {
+            // Remove text display if label is null
+            textDisplay?.let {
+                if (it.isSpawned) {
+                    it.despawn()
+                    it.remove()
+                }
+                textDisplay = null
+            }
+        }
+
         onInteract = builder.interaction
         if (itemDisplay.isSpawned) {
             itemDisplay.teleport(position.toPacketLocation())
@@ -139,6 +168,9 @@ private class NodeDisplay {
                     .withY { it - builder.scale.y / 2 }
                     .toPacketLocation())
         }
+        if (textDisplay?.isSpawned == true) {
+            textDisplay?.teleport(position.withY { it + 0.5 }.toPacketLocation())
+        }
     }
 
     fun show(player: Player, position: Position) {
@@ -146,6 +178,10 @@ private class NodeDisplay {
         itemDisplay.spawn(position.toPacketLocation())
         interaction.addViewer(player.uniqueId)
         interaction.spawn(position.toPacketLocation())
+        textDisplay?.let {
+            it.addViewer(player.uniqueId)
+            it.spawn(position.withY { y -> y + 0.5 }.toPacketLocation())
+        }
     }
 
     fun interact() {
@@ -157,5 +193,9 @@ private class NodeDisplay {
         itemDisplay.remove()
         interaction.despawn()
         interaction.remove()
+        textDisplay?.let {
+            it.despawn()
+            it.remove()
+        }
     }
 }

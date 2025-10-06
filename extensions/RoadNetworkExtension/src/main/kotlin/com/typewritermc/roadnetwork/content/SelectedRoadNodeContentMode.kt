@@ -125,6 +125,7 @@ class SelectedRoadNodeContentMode(
                 else -> null
             }
             scale = Vector3f(0.5f, 0.5f, 0.5f)
+            label = node.id.toString()
             onInteract { interactWithNode(node) }
         }
 
@@ -132,6 +133,7 @@ class SelectedRoadNodeContentMode(
             item = ItemStack(Material.NETHERITE_BLOCK)
             glow = NamedTextColor.BLACK
             scale = Vector3f(0.5f, 0.5f, 0.5f)
+            label = it.id.toString()
             onInteract {
                 ContentModeSwapTrigger(
                     context,
@@ -354,6 +356,7 @@ class SelectedRoadNodeContentMode(
     }
 }
 
+
 class RemoveNodeComponent(
     private val slot: Int = 0,
     private val onRemove: () -> Unit,
@@ -388,7 +391,6 @@ private class SelectedNodePathsComponent(
         val node = nodeFetcher() ?: return
         val network = networkFetcher()
         val nodes = network.nodes.associateBy { it.id }
-        val instance = node.position.world.instanceSpace
 
         paths.clear()
 
@@ -400,12 +402,14 @@ private class SelectedNodePathsComponent(
                 val pathFuture = roadNetworkFindPatheticPath(start, end)
 
                 pathFuture.thenAccept { path ->
-                    if(path.pathState == PathState.FOUND) {
-                        val nodes = path.path.map { pathNode ->
-                            Node(pathNode.flooredX, pathNode.flooredY, pathNode.flooredZ, Passibility.passible)
-                        }.toTypedArray()
+                    if (path.pathState == PathState.FOUND) {
+                        if (path.pathState == PathState.FOUND) {
+                            val nodes = path.path.map { pathNode ->
+                                Node(pathNode.flooredX, pathNode.flooredY, pathNode.flooredZ, Passibility.passible)
+                            }.toTypedArray()
 
-                        paths[edge] = PathObject(1.0f, *nodes)
+                            paths[edge] = PathObject(1.0f, *nodes)
+                        }
                     }
                 }
             }

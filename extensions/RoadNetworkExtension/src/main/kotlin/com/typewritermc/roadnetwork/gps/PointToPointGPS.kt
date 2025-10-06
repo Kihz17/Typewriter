@@ -35,14 +35,14 @@ class PointToPointGPS(
         val end = endFetcher(network)
         if ((start.distanceSqrt(end) ?: Double.MAX_VALUE) < 1) return@switchContext ok(emptyList())
 
-        val endPair = getOrCreateNode(network.nodes, network.negativeNodes, end, previousEnd, -2, asEnd = true)
+        val endPair = getOrCreateNode(network.nodes, network.negativeNodes, end, previousEnd, "__temp_end", asEnd = true)
         previousEnd = endPair
         val startPair = getOrCreateNode(
             network.nodes + endPair.first,
             network.negativeNodes,
             start,
             previousStart,
-            -1,
+            "__temp_start",
             asEnd = false
         )
         previousStart = startPair
@@ -102,7 +102,7 @@ class PointToPointGPS(
 
             visited[current.node] = VisitedNode(current.edge)
 
-            if (current.node.id > 0) {
+            if (!current.node.id.startsWith("__temp_")) {
                 val visitedEdge = previous.firstOrNull { it.start == current.node }
                 if (visitedEdge != null) {
                     // We have come to a point where the previous path has already been
@@ -148,7 +148,7 @@ class PointToPointGPS(
 
             visited[current.node] = VisitedNode(current.edge)
 
-            if (current.node.id > 0) {
+            if (!current.node.id.startsWith("__temp_")) {
                 val visitedEdge = path.firstOrNull { it.end == current.node }
                 if (visitedEdge != null) {
                     val pathEdges = findEdgesReverse(visited, end.id, visitedEdge)
@@ -223,7 +223,7 @@ class PointToPointGPS(
         negativeNodes: List<RoadNode>,
         position: Position,
         previous: Pair<RoadNode, List<RoadEdge>?>?,
-        id: Int,
+        id: String,
         asEnd: Boolean,
     ): Pair<RoadNode, List<RoadEdge>?> {
         if (previous != null && (previous.first.position.distanceSqrt(position)
