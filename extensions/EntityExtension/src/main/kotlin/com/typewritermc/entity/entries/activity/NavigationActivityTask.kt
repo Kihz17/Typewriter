@@ -39,6 +39,7 @@ import kotlin.math.sin
 class NavigationActivity(
     private val gps: GPS,
     startLocation: PositionProperty,
+    private val pathCenterWeight: Float
 ) : GenericEntityActivity {
     private var path: List<GPSEdge>? = null
     private var state: NavigationActivityTaskState = NavigationActivityTaskState.Searching(gps, startLocation)
@@ -67,7 +68,9 @@ class NavigationActivity(
                     gps.roadNetwork,
                     currentEdge,
                     currentPosition,
-                    speed = speed
+                    speed = speed,
+                    rotationLookAhead = 3,
+                    perpWeight = pathCenterWeight
                 )
 
                 else -> NavigationActivityTaskState.FakeNavigation(currentEdge, speed = speed)
@@ -78,7 +81,7 @@ class NavigationActivity(
         // The fake navigation is used to improve the performance, it however, goes through buildings
         // So, we switch to walking when the entity is viewed
         if (state is NavigationActivityTaskState.FakeNavigation && context.isViewed) {
-            this.state = NavigationActivityTaskState.Walking(gps.roadNetwork, state.edge, currentPosition, speed)
+            this.state = NavigationActivityTaskState.Walking(gps.roadNetwork, state.edge, currentPosition, speed, 3, pathCenterWeight)
         }
 
         // And we switch back to fake navigation when the entity is not viewed
@@ -168,6 +171,7 @@ sealed interface NavigationActivityTaskState {
         startLocation: PositionProperty,
         val speed: Float,
         private val rotationLookAhead: Int = 3,
+        private val perpWeight: Float = 0.0F,
     ) : NavigationActivityTaskState, IPathingEntity {
         private var location: PositionProperty = startLocation
         private var path: IPath?
@@ -182,6 +186,7 @@ sealed interface NavigationActivityTaskState {
         init {
             val instance = startLocation.toBukkitLocation().world.instanceSpace
             navigator = HydrazinePathFinder(this, instance)
+            navigator.setPerpendicularWeight(perpWeight)
 
             // We want to avoid going through negative nodes
             // Since we just queried the network, it is likely that the network is already loaded.

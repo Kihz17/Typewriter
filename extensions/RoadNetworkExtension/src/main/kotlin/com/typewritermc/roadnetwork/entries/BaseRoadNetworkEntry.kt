@@ -25,6 +25,7 @@ class BaseRoadNetworkEntry(
     override val name: String = "",
     @ContentEditor(RoadNetworkContentMode::class)
     override val artifactId: String = "",
+    override val pathCenterWeight: Float = 0.0F
 ) : RoadNetworkEntry {
     override suspend fun loadRoadNetwork(gson: Gson): RoadNetwork {
         if (!hasData()) return RoadNetwork()

@@ -27,8 +27,11 @@ part "page_editor.g.dart";
 @Riverpod(keepAlive: true)
 String? currentPageId(Ref ref) {
   final routeData = ref.watch(currentRouteDataProvider(PageEditorRoute.name));
-  final newPageId = routeData?.pathParams.getString("id");
+  return routeData?.pathParams.getString("id");
+}
 
+@riverpod
+void _trackPageCleanup(Ref ref) {
   // Track previous page for cleanup
   ref.listen(currentPageIdProvider, (previous, next) {
     if (previous != null && previous != next) {
@@ -36,8 +39,6 @@ String? currentPageId(Ref ref) {
       ref.read(cleanupPageProvidersProvider(previous));
     }
   });
-
-  return newPageId;
 }
 
 @riverpod
@@ -78,6 +79,9 @@ class PageEditor extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Initialize page cleanup tracking
+    ref.watch(_trackPageCleanupProvider);
+
     return ColoredBox(
       color: Theme.of(context).scaffoldBackgroundColor,
       child: const Column(

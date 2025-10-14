@@ -45,6 +45,8 @@ val roadNetworkMaxDistance by snippet(
 
 @Tags("road_network")
 interface RoadNetworkEntry : ArtifactEntry {
+    val pathCenterWeight: Float
+
     suspend fun loadRoadNetwork(gson: Gson): RoadNetwork
     suspend fun saveRoadNetwork(gson: Gson, network: RoadNetwork)
 }
@@ -76,6 +78,7 @@ data class RoadNetwork(
     val modifications: List<RoadModification> = emptyList(),
     val negativeNodes: List<RoadNode> = emptyList(),
     val networkType: NetworkType = NetworkType.AUTO_CONNECT,
+    var pathCenterWeight: Float = 0.0F
 )
 
 @JvmInline

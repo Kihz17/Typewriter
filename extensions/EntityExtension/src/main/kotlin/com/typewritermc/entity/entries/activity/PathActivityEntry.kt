@@ -65,7 +65,8 @@ private class PathActivity(
                 roadNetwork,
                 { currentPosition.toPosition() }) {
                 targetNode.position
-            }, currentPosition
+            }, currentPosition,
+            roadNetwork.get()?.pathCenterWeight ?: 0.0F
         )
         activity.initialize(context)
     }

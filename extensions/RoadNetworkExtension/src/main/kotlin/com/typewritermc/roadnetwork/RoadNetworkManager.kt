@@ -11,7 +11,6 @@ import com.typewritermc.core.utils.UntickedAsync
 import com.typewritermc.core.utils.launch
 import com.typewritermc.engine.paper.logger
 import com.typewritermc.engine.paper.plugin
-import de.bsommerfeld.pathetic.bukkit.PatheticBukkit
 import kotlinx.coroutines.*
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -23,7 +22,7 @@ class RoadNetworkManager : Initializable, KoinComponent {
     private val gson by inject<Gson>(named("roadNetworkParser"))
     private val networks = CacheBuilder.newBuilder()
         .expireAfterAccess(10, TimeUnit.MINUTES)
-        .build(CacheLoader.from(::loadRoadNetwork))
+        .build<String, CompletableDeferred<RoadNetwork>>()
 
     private var job: Job? = null
 
@@ -43,11 +42,9 @@ class RoadNetworkManager : Initializable, KoinComponent {
                 editors.asMap().values.forEach { it.refresh() }
             }
         }
-
-        PatheticBukkit.initialize(plugin)
     }
 
-    private fun loadRoadNetwork(id: String): CompletableDeferred<RoadNetwork> {
+    private fun loadRoadNetwork(ref: Ref<out RoadNetworkEntry>, id: String): CompletableDeferred<RoadNetwork> {
         val deferred = CompletableDeferred<RoadNetwork>()
         Dispatchers.UntickedAsync.launch {
             val network = try {
@@ -57,18 +54,25 @@ class RoadNetworkManager : Initializable, KoinComponent {
                 null
             } ?: RoadNetwork()
 
+            network.pathCenterWeight = ref.get()?.pathCenterWeight ?: 0.0F
+
             deferred.complete(network)
         }
         return deferred
     }
 
     suspend fun getNetwork(ref: Ref<out RoadNetworkEntry>): RoadNetwork {
-        return networks.get(ref.id).await()
+        return networks.get(ref.id) {
+            loadRoadNetwork(ref, ref.id)
+        }.await()
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     fun getNetworkOrNull(ref: Ref<out RoadNetworkEntry>): RoadNetwork? {
-        val deferred = networks.get(ref.id)
+        val deferred = networks.get(ref.id) {
+            loadRoadNetwork(ref, ref.id)
+        }
+
         return if (deferred.isCompleted) deferred.getCompleted() else null
     }
 

@@ -238,23 +238,20 @@ private class NetworkAddNodeComponent(
 
         val items = mutableMapOf<Int, IntractableItem>(4 to addNodeItem)
 
-        // Only show negative node option for auto-connect networks
-        if (networkType != NetworkType.EXPLICIT_LINKS) {
-            val addNegativeNodeItem = ItemStack(Material.NETHERITE_INGOT).apply {
-                editMeta { meta ->
-                    meta.name = "<red><b>Add Negative Node"
-                    meta.loreString = """
-                    |<line> <gray>Click to add a new negative node to the road network
-                    |<line> <gray>Blocking pathfinding through its radius
-                    """.trimMargin()
-                }
-            } onInteract {
-                if (it.type.isClick) onAddNegative(
-                    it.clickedBlock?.location?.toPosition()?.add(0.0, 1.0, 0.0) ?: player.position
-                )
+        val addNegativeNodeItem = ItemStack(Material.NETHERITE_INGOT).apply {
+            editMeta { meta ->
+                meta.name = "<red><b>Add Negative Node"
+                meta.loreString = """
+                |<line> <gray>Click to add a new negative node to the road network
+                |<line> <gray>Blocking pathfinding through its radius
+                """.trimMargin()
             }
-            items[5] = addNegativeNodeItem
+        } onInteract {
+            if (it.type.isClick) onAddNegative(
+                it.clickedBlock?.location?.toPosition()?.add(0.0, 1.0, 0.0) ?: player.position
+            )
         }
+        items[5] = addNegativeNodeItem
 
         return items
     }

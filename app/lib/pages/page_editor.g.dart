@@ -6,7 +6,7 @@ part of 'page_editor.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$currentPageIdHash() => r'0b25228566740d26ca51a7865fdd3ae55030d3b9';
+String _$currentPageIdHash() => r'9442a56c441884a942b6a28d352693b7832793b5';
 
 /// See also [currentPageId].
 @ProviderFor(currentPageId)
@@ -23,6 +23,23 @@ final currentPageIdProvider = Provider<String?>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef CurrentPageIdRef = ProviderRef<String?>;
+String _$trackPageCleanupHash() => r'4c5ca394a7ec1115c2c3d6e145093449a2cb5617';
+
+/// See also [_trackPageCleanup].
+@ProviderFor(_trackPageCleanup)
+final _trackPageCleanupProvider = AutoDisposeProvider<void>.internal(
+  _trackPageCleanup,
+  name: r'_trackPageCleanupProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$trackPageCleanupHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef _TrackPageCleanupRef = AutoDisposeProviderRef<void>;
 String _$cleanupPageProvidersHash() =>
     r'5bb4f367300619b11cf27d54793a500e71161b7b';
 

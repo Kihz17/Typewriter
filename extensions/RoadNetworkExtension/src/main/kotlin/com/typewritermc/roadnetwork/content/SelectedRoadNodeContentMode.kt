@@ -1,9 +1,6 @@
 package com.typewritermc.roadnetwork.content
 
 import com.extollit.gaming.ai.path.model.IPath
-import com.extollit.gaming.ai.path.model.Node
-import com.extollit.gaming.ai.path.model.Passibility
-import com.extollit.gaming.ai.path.model.PathObject
 import com.github.retrooper.packetevents.protocol.particle.Particle
 import com.github.retrooper.packetevents.protocol.particle.data.ParticleDustData
 import com.github.retrooper.packetevents.protocol.particle.type.ParticleTypes
@@ -26,9 +23,7 @@ import com.typewritermc.engine.paper.plugin
 import com.typewritermc.engine.paper.utils.*
 import com.typewritermc.roadnetwork.*
 import com.typewritermc.roadnetwork.gps.roadNetworkFindPath
-import com.typewritermc.roadnetwork.gps.roadNetworkFindPatheticPath
 import com.typewritermc.roadnetwork.pathfinding.instanceSpace
-import de.bsommerfeld.pathetic.api.pathing.result.PathState
 import kotlinx.coroutines.Dispatchers
 import lirand.api.extensions.events.unregister
 import lirand.api.extensions.server.registerEvents
@@ -78,15 +73,17 @@ class SelectedRoadNodeContentMode(
         }
         exit(doubleShiftExits = true)
 
-        +NodeRadiusComponent(::selectedNode, initiallyScrolling) { radiusChange ->
-            editorComponent.updateAsync { roadNetwork ->
-                roadNetwork.copy(nodes = roadNetwork.nodes.map { node ->
-                    if (node.id == selectedNodeId) node.copy(
-                        radius = (node.radius + radiusChange).coerceAtLeast(
-                            0.5
-                        )
-                    ) else node
-                })
+        if(network.networkType != NetworkType.EXPLICIT_LINKS ) {
+            +NodeRadiusComponent(::selectedNode, initiallyScrolling) { radiusChange ->
+                editorComponent.updateAsync { roadNetwork ->
+                    roadNetwork.copy(nodes = roadNetwork.nodes.map { node ->
+                        if (node.id == selectedNodeId) node.copy(
+                            radius = (node.radius + radiusChange).coerceAtLeast(
+                                0.5
+                            )
+                        ) else node
+                    })
+                }
             }
         }
 
@@ -305,7 +302,8 @@ class SelectedRoadNodeContentMode(
             targetNode,
             instance = currentSelectedNode.position.world.instanceSpace,
             nodes = interestingNodes,
-            negativeNodes = network.negativeNodes
+            negativeNodes = network.negativeNodes,
+            centerPathWeight = network.pathCenterWeight
         ) ?: return // Return if pathfinding fails
 
         // Create edges for missing directions
@@ -377,61 +375,56 @@ private class SelectedNodePathsComponent(
     private val nodeFetcher: () -> RoadNode?,
     private val networkFetcher: () -> RoadNetwork,
 ) : ContentComponent {
-    private var paths: ConcurrentHashMap<RoadEdge, IPath> = ConcurrentHashMap()
+    private var paths: Map<RoadEdge, IPath>? = null
     val isPathsLoaded: Boolean
-        get() = !paths.isEmpty()
+        get() = paths != null
 
     override suspend fun initialize(player: Player) {
         Dispatchers.UntickedAsync.launch {
-            loadEdgePaths()
+            paths = loadEdgePaths()
         }
     }
 
-    private fun loadEdgePaths() {
-        val node = nodeFetcher() ?: return
+    private fun loadEdgePaths(): Map<RoadEdge, IPath> {
+        val node = nodeFetcher() ?: return emptyMap()
         val network = networkFetcher()
         val nodes = network.nodes.associateBy { it.id }
+        val instance = node.position.world.instanceSpace
+        return network.edges.filter { it.start == node.id }
+            .mapNotNull { edge ->
+                val start = nodes[edge.start] ?: return@mapNotNull null
+                val end = nodes[edge.end] ?: return@mapNotNull null
 
-        paths.clear()
-
-        network.edges.filter { it.start == node.id }
-            .forEach { edge ->
-                val start = nodes[edge.start] ?: return@forEach
-                val end = nodes[edge.end] ?: return@forEach
-
-                val pathFuture = roadNetworkFindPatheticPath(start, end)
-
-                pathFuture.thenAccept { path ->
-                    if (path.pathState == PathState.FOUND) {
-                        if (path.pathState == PathState.FOUND) {
-                            val nodes = path.path.map { pathNode ->
-                                Node(pathNode.flooredX, pathNode.flooredY, pathNode.flooredZ, Passibility.passible)
-                            }.toTypedArray()
-
-                            paths[edge] = PathObject(1.0f, *nodes)
-                        }
-                    }
-                }
+                val path = roadNetworkFindPath(
+                    start,
+                    end,
+                    instance = instance,
+                    nodes = network.nodes,
+                    negativeNodes = network.negativeNodes,
+                    centerPathWeight = network.pathCenterWeight
+                ) ?: return@mapNotNull null
+                edge to path
             }
+            .toMap()
     }
 
     private fun refreshEdges() {
         val node = nodeFetcher() ?: return
         val network = networkFetcher()
         val edges = network.edges.filter { it.start == node.id }
-        if (paths.keys.toSet() == edges.toSet()) return
-        loadEdgePaths()
+        if (paths?.keys?.toSet() == edges.toSet()) return
+        paths = loadEdgePaths()
     }
 
     private var tick = 0
     override suspend fun tick(player: Player) {
-        if (paths.isEmpty()) return
+        if (paths == null) return
         if (tick++ % 20 == 0) {
             refreshEdges()
         }
         if (tick++ % 3 != 0) return
 
-        paths.forEach { (edge, path) ->
+        paths?.forEach { (edge, path) ->
             path.forEach {
                 WrapperPlayServerParticle(
                     Particle(

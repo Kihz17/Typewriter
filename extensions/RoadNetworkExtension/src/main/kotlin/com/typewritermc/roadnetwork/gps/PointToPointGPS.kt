@@ -35,7 +35,7 @@ class PointToPointGPS(
         val end = endFetcher(network)
         if ((start.distanceSqrt(end) ?: Double.MAX_VALUE) < 1) return@switchContext ok(emptyList())
 
-        val endPair = getOrCreateNode(network.nodes, network.negativeNodes, end, previousEnd, "__temp_end", asEnd = true)
+        val endPair = getOrCreateNode(network.nodes, network.negativeNodes, end, previousEnd, "__temp_end", asEnd = true, network.pathCenterWeight)
         previousEnd = endPair
         val startPair = getOrCreateNode(
             network.nodes + endPair.first,
@@ -43,7 +43,8 @@ class PointToPointGPS(
             start,
             previousStart,
             "__temp_start",
-            asEnd = false
+            asEnd = false,
+            network.pathCenterWeight
         )
         previousStart = startPair
 
@@ -225,6 +226,7 @@ class PointToPointGPS(
         previous: Pair<RoadNode, List<RoadEdge>?>?,
         id: String,
         asEnd: Boolean,
+        pathCenterWeight: Float
     ): Pair<RoadNode, List<RoadEdge>?> {
         if (previous != null && (previous.first.position.distanceSqrt(position)
                 ?: Double.MAX_VALUE) < previous.first.radius * previous.first.radius
@@ -237,7 +239,7 @@ class PointToPointGPS(
         }
         if (node != null) return node to null
         val newNode = RoadNode(RoadNodeId(id), position, 0.5)
-        val additionalEdges = findAdditionalEdges(nodes, negativeNodes, newNode, asEnd)
+        val additionalEdges = findAdditionalEdges(nodes, negativeNodes, newNode, asEnd, pathCenterWeight)
         return newNode to additionalEdges
     }
 
@@ -246,6 +248,7 @@ class PointToPointGPS(
         negativeNodes: List<RoadNode>,
         node: RoadNode,
         asEnd: Boolean,
+        pathCenterWeight: Float
     ): List<RoadEdge> =
         coroutineScope {
             val instance = node.position.world.instanceSpace
@@ -265,7 +268,8 @@ class PointToPointGPS(
                                 end,
                                 instance = instance,
                                 nodes = intersectingNodes,
-                                negativeNodes = negativeNodes
+                                negativeNodes = negativeNodes,
+                                centerPathWeight = pathCenterWeight
                             ) ?: return@async null
 
                         RoadEdge(start.id, end.id, weight = path.length().toDouble(), length = path.length().toDouble())

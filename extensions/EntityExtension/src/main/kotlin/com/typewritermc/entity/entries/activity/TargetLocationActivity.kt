@@ -96,7 +96,8 @@ class TargetLocationActivity(
                     network,
                     { currentLocation.toPosition() },
                     { targetPosition }
-                ), currentLocation)
+                ), currentLocation,
+                network.get()?.pathCenterWeight ?: 0.0F)
         }
     }
 

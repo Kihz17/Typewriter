@@ -63,7 +63,8 @@ class RandomPatrolActivity(
                 roadNetwork,
                 { currentPosition.toPosition() }) {
                 nextNode.position
-            }, currentPosition
+            }, currentPosition,
+            roadNetwork.get()?.pathCenterWeight ?: 0.0F
         )
         activity.initialize(context)
         return TickResult.CONSUMED

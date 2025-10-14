@@ -158,19 +158,20 @@ class FieldHeader extends HookConsumerWidget {
                         actions,
                         HeaderActionLocation.leading,
                       ),
-                      Padding(
-                        padding: EdgeInsets.symmetric(
-                          vertical: canExpand ? 10 : 0,
-                        ),
-                        child: SectionTitle(
-                          title: name,
+                      Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: canExpand ? 10 : 0,
+                          ),
+                          child: SectionTitle(
+                            title: name,
+                          ),
                         ),
                       ),
                       ...createActions(
                         actions,
                         HeaderActionLocation.trailing,
                       ),
-                      const Spacer(),
                       ...createActions(
                         actions,
                         HeaderActionLocation.actions,
