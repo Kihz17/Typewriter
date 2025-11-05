@@ -109,6 +109,7 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
     // Register viewport center getter immediately
     debugPrint("DEBUG: Registering viewport center getter in DraggableGraph initState");
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return; // Check if widget is still mounted
       ref.read(viewportCenterGetterProvider.notifier).setGetter(getViewportCenter);
       debugPrint("DEBUG: Viewport center getter registered successfully in initState");
     });
@@ -116,18 +117,21 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
     // Register graph update notifier
     debugPrint("DEBUG: Registering graph update notifier in DraggableGraph initState");
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return; // Check if widget is still mounted
       ref.read(graphUpdateNotifierProvider.notifier).setNotifier(_onGraphUpdate);
       debugPrint("DEBUG: Graph update notifier registered successfully in initState");
     });
 
     // Initialize page tracking
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return; // Check if widget is still mounted
       final page = ref.read(currentPageProvider);
       _lastPageId = page?.id;
     });
 
     // Initialize viewport culling immediately
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return; // Check if widget is still mounted
       _onViewportChanged();
       _initializeNodePositions();
       _generateAllMissingPositions();
@@ -148,6 +152,7 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
       _lastPageId = newPageId;
       // Schedule camera centering after the frame is built
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return; // Check if widget is still mounted
         _centerCameraOnNodes();
       });
     }
@@ -155,16 +160,22 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
 
   @override
   void dispose() {
-    // Clear viewport center getter
-    ref.read(viewportCenterGetterProvider.notifier).setGetter(null);
+    // Clear viewport center getter and graph update notifier FIRST
+    // This must be done before any other disposal to ensure ref is still valid
+    try {
+      ref.read(viewportCenterGetterProvider.notifier).setGetter(null);
+      ref.read(graphUpdateNotifierProvider.notifier).setNotifier(null);
+    } catch (e) {
+      debugPrint("DEBUG: Error clearing providers in dispose: $e");
+    }
 
-    // Clear graph update notifier
-    ref.read(graphUpdateNotifierProvider.notifier).setNotifier(null);
-
+    // Clean up other resources
     _controller.removeListener(_onViewportChanged);
     _controller.dispose();
     _throttleTimer?.cancel();
     _animController.dispose();
+
+    // Call super.dispose() LAST
     super.dispose();
   }
 
@@ -218,6 +229,7 @@ class _DraggableGraphState extends ConsumerState<DraggableGraph> with SingleTick
     final key = _nodeKeys[nodeId];
     if (key?.currentContext != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return; // Check if widget is still mounted
         final renderBox = key!.currentContext?.findRenderObject() as RenderBox?;
         if (renderBox != null && mounted) {
           setState(() {

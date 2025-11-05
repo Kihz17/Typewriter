@@ -18,6 +18,11 @@ allprojects {
         maven { url = uri("https://jitpack.io") }
     }
 
+    dependencies {
+        implementation(kotlin("stdlib"))
+        implementation(kotlin("reflect"))
+    }
+
     val targetJavaVersion = 21
     java {
         val javaVersion = JavaVersion.toVersion(targetJavaVersion)

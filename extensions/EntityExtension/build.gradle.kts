@@ -1,7 +1,12 @@
-repositories {}
+repositories {
+    flatDir {
+        dirs("libs")
+    }
+}
 dependencies {
     compileOnly(project(":RoadNetworkExtension"))
     compileOnly(project(":QuestExtension"))
+    compileOnly(files("libs/RadianceMMO.jar"))
 }
 
 typewriter {

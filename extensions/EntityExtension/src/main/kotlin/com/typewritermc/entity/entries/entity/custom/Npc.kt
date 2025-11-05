@@ -3,6 +3,7 @@ package com.typewritermc.entity.entries.entity.custom
 import com.typewritermc.core.books.pages.Colors
 import com.typewritermc.core.entries.Ref
 import com.typewritermc.core.entries.emptyRef
+import com.typewritermc.core.entries.priority
 import com.typewritermc.core.entries.ref
 import com.typewritermc.core.extension.annotations.Entry
 import com.typewritermc.core.extension.annotations.Help
@@ -11,9 +12,13 @@ import com.typewritermc.core.extension.annotations.Tags
 import com.typewritermc.core.utils.point.Position
 import com.typewritermc.engine.paper.entry.entity.*
 import com.typewritermc.engine.paper.entry.entries.*
+import com.typewritermc.engine.paper.utils.Color
 import com.typewritermc.engine.paper.utils.Sound
+import com.typewritermc.entity.entries.data.minecraft.QuestGlowingEffectData
 import com.typewritermc.entity.entries.entity.minecraft.PlayerEntity
+import net.shared.hud.QuestType
 import org.bukkit.entity.Player
+import java.util.*
 
 
 @Entry("npc_definition", "A simplified premade npc", Colors.ORANGE, "material-symbols:account-box")
@@ -34,6 +39,8 @@ class NpcDefinition(
     override val name: String = "",
     override val displayName: Var<String> = ConstVar(""),
     override val sound: Var<Sound> = ConstVar(Sound.EMPTY),
+    val hitSound: Var<Sound> = ConstVar(Sound.EMPTY),
+    val deathSound: Var<Sound> = ConstVar(Sound.EMPTY),
     @Help("The skin of the npc.")
     val skin: Var<SkinProperty> = ConstVar(SkinProperty()),
     @OnlyTags("generic_entity_data", "living_entity_data", "lines", "player_data")
@@ -57,7 +64,54 @@ class NpcInstance(
     @OnlyTags("generic_entity_data", "living_entity_data", "lines", "player_data")
     override val data: List<Ref<EntityData<*>>> = emptyList(),
     override val activity: Ref<out SharedEntityActivityEntry> = emptyRef(),
-) : SimpleEntityInstance
+) : SimpleEntityInstance {
+
+    // Automatically add quest glowing effect data for MAIN_QUEST and SIDE_QUEST
+    override val children: List<Ref<out AudienceEntry>>
+        get() = getAllData()
+
+    private fun getAllData(): List<Ref<out EntityData<*>>> {
+        val mainQuestGlow = QuestGlowingEffectData(
+            id = "${id}_main_quest_glow",
+            name = "${name}_main_quest_glow",
+            glowing = true,
+            questType = QuestType.MAIN_QUEST,
+            priorityOverride = Optional.of(100)
+        ).ref()
+
+        val sideQuestGlow = QuestGlowingEffectData(
+            id = "${id}_side_quest_glow",
+            name = "${name}_side_quest_glow",
+            glowing = true,
+            questType = QuestType.SIDE_QUEST,
+            priorityOverride = Optional.of(99)
+        ).ref()
+
+        return data + listOf(mainQuestGlow, sideQuestGlow)
+    }
+
+    override suspend fun display(): AudienceFilter {
+        val definition = definition.get() ?: return PassThroughFilter(ref())
+        val activity = this.activity.get() ?: IdleActivity
+
+        val definitionData = definition.data.withPriority()
+        val maxDefinitionData = definitionData.maxOfOrNull { it.second } ?: 0
+
+        // Use getAllData() instead of data to include quest glowing effects
+        val instanceData = getAllData().mapNotNull {
+            val entityData = it.get() ?: return@mapNotNull null
+            entityData to (entityData.priority + maxDefinitionData + 1)
+        }
+
+        return SharedAudienceEntityDisplay(
+            ref(),
+            definition,
+            activity,
+            (definitionData + instanceData),
+            spawnLocation,
+        )
+    }
+}
 
 class NpcEntity(
     player: Player,

@@ -10,6 +10,7 @@ fun applyGenericEntityData(entity: WrapperEntity, property: EntityProperty): Boo
     when (property) {
         is OnFireProperty -> applyOnFireData(entity, property)
         is GlowingEffectProperty -> applyGlowingEffectData(entity, property)
+        is QuestGlowingEffectProperty -> applyGlowingEffectData(entity, property)
         is PoseProperty -> applyPoseData(entity, property)
         is CustomNameProperty -> applyCustomNameData(entity, property)
         is ArmSwingProperty -> applyArmSwingData(entity, property)

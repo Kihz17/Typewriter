@@ -26,6 +26,11 @@ repositories {
     }
     // EntityLib
     maven("https://maven.evokegames.gg/snapshots")
+    maven("https://jitpack.io")
+    // Local libs folder
+    flatDir {
+        dirs("../../extensions/EntityExtension/libs")
+    }
 }
 
 dependencies {
@@ -36,7 +41,8 @@ dependencies {
 
     compileOnlyApi("com.corundumstudio.socketio:netty-socketio:1.7.19") // Keep this on a lower version as the newer version breaks the ping
 
-    api("me.tofaa.entitylib:spigot:+598d71f-SNAPSHOT")
+    api("com.github.Tofaa2.EntityLib:spigot:master-SNAPSHOT")
+    //api("me.tofaa.entitylib:spigot:+598d71f-SNAPSHOT")
     compileOnlyApi("com.github.shynixn.mccoroutine:mccoroutine-bukkit-api:2.22.0")
     compileOnlyApi("com.github.shynixn.mccoroutine:mccoroutine-bukkit-core:2.22.0")
 
@@ -59,6 +65,9 @@ dependencies {
     compileOnly("me.clip:placeholderapi:2.11.6")
     compileOnlyApi("org.geysermc.geyser:api:2.8.2-SNAPSHOT")
     compileOnlyApi("org.geysermc.floodgate:api:2.2.4-SNAPSHOT")
+
+    // RadianceMMO from extensions libs folder
+    compileOnly(files("../../extensions/EntityExtension/libs/RadianceMMO.jar"))
 
     testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.46.3")
 }
